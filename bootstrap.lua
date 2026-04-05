@@ -134,6 +134,7 @@ local function selectRole()
   print("")
   print("=== Tower Control - First Boot ===")
   print("")
+  ensureBasalt()
   print("Is this the SERVER (control center)? [y/n]")
   local ans = read():lower()
 
