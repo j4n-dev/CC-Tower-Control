@@ -180,14 +180,14 @@ local fileList = isServer and SERVER_FILES or CLIENT_FILES
 -- 1. Basalt first - needed before anything else runs
 ensureBasalt()
 
--- 2. Update files from GitHub
-checkAndUpdate(fileList)
-
--- 3. First-time setup if no config yet
+-- 2. First-time setup if no config yet
 if not fs.exists(CFG_FILE) then
   selectRole()
   return
 end
+
+-- 3. Update files from GitHub
+checkAndUpdate(fileList)
 
 -- 4. Launch
 local f   = fs.open(CFG_FILE, "r")
