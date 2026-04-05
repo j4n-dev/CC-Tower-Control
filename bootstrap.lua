@@ -101,8 +101,6 @@ local function selectRole()
     print("")
     print("Is this the SERVER (control center)? [y/n]")
     local ans = read():lower()
-    local isServer = existingCfg and existingCfg.role == "server"
-    local fileList = isServer and SERVER_FILES or CLIENT_FILES
 
     if ans == "y" then
         writeFile(CFG_FILE, textutils.serialiseJSON({
@@ -112,7 +110,7 @@ local function selectRole()
         print("Server role saved.")
 
         -- Install server files immediately so setup can be skipped on next boot
-        checkAndUpdate(fileList)
+        checkAndUpdate(SERVER_FILES)
 
         print("Finished initial setup. Reboot now? [y/n]")
         os.sleep(1)
@@ -124,7 +122,7 @@ local function selectRole()
     end
 
     -- Client: run guided setup
-    checkAndUpdate(fileList)
+    checkAndUpdate(CLIENT_FILES)
     local setup = require("setup")
     local cfg = setup.run()
 
