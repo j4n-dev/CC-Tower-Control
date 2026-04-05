@@ -1,7 +1,7 @@
 -- client.lua
 -- Generic Tower Control client.
 -- All hardware config (sides, labels, peripherals) comes from node.cfg.
--- If a node monitor is configured, renders a locked single-node UI via Basalt 2.
+-- If a node monitor is configured, renders a locked single-node UI via Basalt 1.
 -- Controls on the monitor are executed locally (no server round-trip needed).
 
 local protocol = require("lib/protocol")
@@ -29,8 +29,6 @@ local cfg = loadConfig()
 
 
 -- Dynamic Control Handlers
--- Built from cfg.controls at startup.
--- Executing a handler directly applies the redstone change locally.
 
 local handlers = {}
 
@@ -74,7 +72,6 @@ local function collectMetrics()
     end
   end
 
-  -- Current logical state of all toggle controls
   for _, control in ipairs(cfg.controls or {}) do
     if control.type == "toggle" then
       local raw     = redstone.getOutput(control.side)
@@ -130,8 +127,7 @@ local function handleMessage(senderId, msg)
     end
 
   elseif msg.action == A.QUERY then
-    local m = collectMetrics()
-    protocol.send(senderId, protocol.msgReport(cfg.nodeId, m))
+    protocol.send(senderId, protocol.msgReport(cfg.nodeId, collectMetrics()))
 
   elseif msg.action == A.PING then
     protocol.send(senderId, protocol.msgPong(cfg.nodeId))
@@ -177,8 +173,7 @@ end
 
 
 -- Node Monitor UI
--- Locked to this node. Controls applied locally.
--- Refreshes every 5 seconds.
+-- Basalt 1: addMonitor(name), autoUpdate()
 
 local function monitorLoop()
   local monitorSide = cfg.nodeMonitorSide
@@ -200,17 +195,16 @@ local function monitorLoop()
   local w, h = mon.getSize()
 
   local C = {
-    bg       = colors.black,
-    text     = colors.white,
-    dim      = colors.lightGray,
-    divider  = colors.lightGray,
-    sliderOn = colors.green,
-    sliderOff= colors.red,
-    barNorm  = colors.lime,
-    barWarn  = colors.yellow,
-    barCrit  = colors.red,
-    barBg    = colors.gray,
-    warn     = colors.yellow,
+    bg        = colors.black,
+    text      = colors.white,
+    dim       = colors.lightGray,
+    divider   = colors.lightGray,
+    sliderOn  = colors.green,
+    sliderOff = colors.red,
+    barNorm   = colors.lime,
+    barWarn   = colors.yellow,
+    barCrit   = colors.red,
+    barBg     = colors.gray,
   }
 
   local function formatNum(n)
@@ -219,55 +213,41 @@ local function monitorLoop()
     else return tostring(math.floor(n)) end
   end
 
-  -- Holds the current Basalt frame so we can remove it on rebuild
-  local currentFrame = nil
+  -- Basalt 1: addMonitor binds a frame to the monitor by peripheral name
+  local monFrame = basalt.addMonitor(monitorSide)
+  monFrame:setBackground(C.bg)
 
   local function render()
-    -- Remove previous frame cleanly
-    if currentFrame then
-      pcall(function() currentFrame:remove() end)
-      currentFrame = nil
-    end
+    monFrame:removeAll()
 
-    mon.setBackgroundColor(C.bg)
-    mon.clear()
-
-    local frame = basalt.createFrame()
-      :setTerm(mon)
-      :setPosition(1, 1)
-      :setSize(w, h)
-      :setBackground(C.bg)
-    currentFrame = frame
-
-    local y = 1
+    local y              = 1
     local currentMetrics = collectMetrics()
 
     -- Header
-    frame:addLabel()
+    monFrame:addLabel()
       :setPosition(2, y)
       :setText("*")
-      :setForeground(colors.green)
+      :setForegroundColor(colors.green)
 
-    frame:addLabel()
+    monFrame:addLabel()
       :setPosition(4, y)
       :setText(cfg.label or cfg.nodeId)
-      :setForeground(C.text)
+      :setForegroundColor(C.text)
 
     y = y + 2
 
-    -- Divider
-    frame:addLabel()
+    monFrame:addLabel()
       :setPosition(1, y)
       :setText(string.rep("\x8c", w))
-      :setForeground(C.divider)
+      :setForegroundColor(C.divider)
     y = y + 1
 
     -- Controls
     if #(cfg.controls or {}) > 0 then
-      frame:addLabel()
+      monFrame:addLabel()
         :setPosition(2, y)
         :setText("Controls")
-        :setForeground(C.dim)
+        :setForegroundColor(C.dim)
       y = y + 1
 
       for _, control in ipairs(cfg.controls or {}) do
@@ -275,10 +255,10 @@ local function monitorLoop()
           local raw  = redstone.getOutput(control.side)
           local isOn = control.invert and not raw or raw
 
-          frame:addLabel()
+          monFrame:addLabel()
             :setPosition(2, y)
             :setText(control.label or control.id)
-            :setForeground(C.text)
+            :setForegroundColor(C.text)
 
           local sliderText, sliderCol
           if isOn then
@@ -289,12 +269,12 @@ local function monitorLoop()
             sliderCol  = C.sliderOff
           end
 
-          local btn = frame:addButton()
+          local btn = monFrame:addButton()
             :setPosition(w - #sliderText - 1, y)
             :setSize(#sliderText, 1)
             :setText(sliderText)
-            :setForeground(sliderCol)
-            :setBackground(C.bg)
+            :setForegroundColor(sliderCol)
+            :setBackgroundColor(C.bg)
 
           local capturedControl = control
           local capturedIsOn    = isOn
@@ -303,7 +283,6 @@ local function monitorLoop()
             local handler = handlers[capturedControl.id]
             if handler then
               pcall(handler, newVal)
-              -- Notify server to keep its state in sync
               protocol.send(cfg.serverId, {
                 action     = protocol.ACTION.ACK,
                 nodeId     = cfg.nodeId,
@@ -318,18 +297,18 @@ local function monitorLoop()
           y = y + 1
 
         elseif control.type == "trigger" then
-          frame:addLabel()
+          monFrame:addLabel()
             :setPosition(2, y)
             :setText(control.label or control.id)
-            :setForeground(C.text)
+            :setForegroundColor(C.text)
 
           local col = control.color == "red" and C.barCrit or colors.blue
-          local btn = frame:addButton()
-            :setPosition(w - 14, y)
-            :setSize(12, 1)
+          local btn = monFrame:addButton()
+            :setPosition(w - 13, y)
+            :setSize(11, 1)
             :setText("[ TRIGGER ]")
-            :setForeground(colors.white)
-            :setBackground(col)
+            :setForegroundColor(colors.white)
+            :setBackgroundColor(col)
 
           local capturedControl = control
           btn:onClick(function()
@@ -344,11 +323,10 @@ local function monitorLoop()
       y = y + 1
     end
 
-    -- Divider before metrics
-    frame:addLabel()
+    monFrame:addLabel()
       :setPosition(1, y)
       :setText(string.rep("\x8c", w))
-      :setForeground(C.divider)
+      :setForegroundColor(C.divider)
     y = y + 1
 
     -- Metrics
@@ -370,15 +348,15 @@ local function monitorLoop()
           valStr = formatNum(m.value) .. " " .. (m.unit or "")
         end
 
-        frame:addLabel()
+        monFrame:addLabel()
           :setPosition(2, y)
           :setText(m.label)
-          :setForeground(C.text)
+          :setForegroundColor(C.text)
 
-        frame:addLabel()
+        monFrame:addLabel()
           :setPosition(w - #valStr - 1, y)
           :setText(valStr)
-          :setForeground(C.dim)
+          :setForegroundColor(C.dim)
 
         y = y + 1
 
@@ -394,11 +372,11 @@ local function monitorLoop()
                          st == "warn" and C.barWarn or
                          C.barNorm
 
-          frame:addLabel()
+          monFrame:addLabel()
             :setPosition(2, y)
             :setText(bar)
-            :setForeground(barCol)
-            :setBackground(C.barBg)
+            :setForegroundColor(barCol)
+            :setBackgroundColor(C.barBg)
 
           y = y + 1
         end
@@ -408,18 +386,17 @@ local function monitorLoop()
     end
 
     if not hasMetrics then
-      frame:addLabel()
+      monFrame:addLabel()
         :setPosition(2, y)
         :setText("No metrics.")
-        :setForeground(C.dim)
+        :setForegroundColor(C.dim)
     end
   end
 
   render()
 
-  -- Refresh loop + Basalt event loop in parallel
   parallel.waitForAny(
-    function() basalt.run() end,
+    function() basalt.autoUpdate() end,
     function()
       while true do
         os.sleep(5)

@@ -1,7 +1,12 @@
 -- lib/ui.lua
--- Basalt 2 UI for Tower Control System.
--- Requires Basalt 2: https://basalt.madefor.cc
--- API: basalt.getMainFrame(), frame:setTerm(mon), basalt.run()
+-- Basalt 1 UI for Tower Control System.
+-- Basalt 1 API:
+--   basalt.createFrame()          main frame (terminal)
+--   basalt.addMonitor("side")     monitor frame
+--   basalt.autoUpdate()           event loop (blocking)
+--   frame:addLabel/Button/etc.
+--   element:setForegroundColor()  / :setBackgroundColor()
+--   element:setTextColor()        (alias)
 
 local ui = {}
 
@@ -149,19 +154,20 @@ end
 
 
 -- Render Helpers
+-- All use Basalt 1 API: setForegroundColor / setBackgroundColor
 
 local function addDivider(frame, y, label)
   local w, _ = frame:getSize()
   local line
   if label and label ~= "" then
-    line = "\x8c\x8c " .. label .. " " .. string.rep("\x8c", w - #label - 5)
+    line = "\x8c\x8c " .. label .. " " .. string.rep("\x8c", math.max(0, w - #label - 5))
   else
     line = string.rep("\x8c", w)
   end
   frame:addLabel()
     :setPosition(1, y)
     :setText(line)
-    :setForeground(COLORS.divider)
+    :setForegroundColor(COLORS.divider)
   return y + 1
 end
 
@@ -178,12 +184,12 @@ local function addMetricBar(frame, y, m, sourceLabel)
   frame:addLabel()
     :setPosition(2, y)
     :setText(labelText)
-    :setForeground(COLORS.textLabel)
+    :setForegroundColor(COLORS.textLabel)
 
   frame:addLabel()
     :setPosition(w - #valText, y)
     :setText(valText)
-    :setForeground(warnIcon(m) ~= "" and COLORS.warn or COLORS.textDim)
+    :setForegroundColor(warnIcon(m) ~= "" and COLORS.warn or COLORS.textDim)
 
   y = y + 1
 
@@ -196,8 +202,8 @@ local function addMetricBar(frame, y, m, sourceLabel)
     frame:addLabel()
       :setPosition(2, y)
       :setText(bar)
-      :setForeground(barColor(m))
-      :setBackground(COLORS.barBg)
+      :setForegroundColor(barColor(m))
+      :setBackgroundColor(COLORS.barBg)
 
     y = y + 1
 
@@ -208,7 +214,7 @@ local function addMetricBar(frame, y, m, sourceLabel)
     frame:addLabel()
       :setPosition(w - #valText, y - 1)
       :setText(valText)
-      :setForeground(col)
+      :setForegroundColor(col)
   end
 
   return y + 1
@@ -221,13 +227,13 @@ local function addSlider(frame, y, control, currentValue, disabled, onToggle)
   frame:addLabel()
     :setPosition(2, y)
     :setText(label)
-    :setForeground(disabled and COLORS.textDim or COLORS.textLabel)
+    :setForegroundColor(disabled and COLORS.textDim or COLORS.textLabel)
 
   if disabled then
     frame:addLabel()
       :setPosition(20, y)
       :setText("[ .......... ]")
-      :setForeground(COLORS.sliderDis)
+      :setForegroundColor(COLORS.sliderDis)
   else
     local sliderText, sliderCol
     if isOn then
@@ -242,8 +248,8 @@ local function addSlider(frame, y, control, currentValue, disabled, onToggle)
       :setPosition(18, y)
       :setSize(#sliderText, 1)
       :setText(sliderText)
-      :setForeground(sliderCol)
-      :setBackground(COLORS.bg)
+      :setForegroundColor(sliderCol)
+      :setBackgroundColor(COLORS.bg)
 
     btn:onClick(function()
       if onToggle then onToggle(control.id, not isOn) end
@@ -262,13 +268,12 @@ local function buildAreaScreen(frame, area, server, onNodeSelect)
   local state = server.getState()
   local idx   = server.getNodeIndex()
 
-  -- All ON / All OFF buttons
   frame:addButton()
     :setPosition(w - 16, y)
     :setSize(8, 1)
     :setText(" All ON")
-    :setForeground(colors.white)
-    :setBackground(COLORS.btnAllOn)
+    :setForegroundColor(colors.white)
+    :setBackgroundColor(COLORS.btnAllOn)
     :onClick(function()
       server.sendControlToArea(area.id, "power", true)
       server.sendControlToArea(area.id, "light", true)
@@ -278,8 +283,8 @@ local function buildAreaScreen(frame, area, server, onNodeSelect)
     :setPosition(w - 7, y)
     :setSize(8, 1)
     :setText("All OFF")
-    :setForeground(colors.white)
-    :setBackground(COLORS.btnAllOff)
+    :setForegroundColor(colors.white)
+    :setBackgroundColor(COLORS.btnAllOff)
     :onClick(function()
       server.sendControlToArea(area.id, "power", false)
       server.sendControlToArea(area.id, "light", false)
@@ -290,23 +295,23 @@ local function buildAreaScreen(frame, area, server, onNodeSelect)
   y = y + 1
 
   for _, nodeId in ipairs(area.nodes or {}) do
-    local nodeDef  = idx[nodeId]
-    local ns       = state[nodeId]
+    local nodeDef = idx[nodeId]
+    local ns      = state[nodeId]
     if nodeDef then
-      local status  = (ns and ns.status) or "offline"
+      local status = (ns and ns.status) or "offline"
 
       frame:addLabel()
         :setPosition(2, y)
         :setText(statusIcon(status))
-        :setForeground(statusColor(status))
+        :setForegroundColor(statusColor(status))
 
       local label = nodeDef.label or nodeId
       local btn = frame:addButton()
         :setPosition(4, y)
         :setSize(w - 6, 1)
         :setText(label .. string.rep(" ", math.max(1, w - 6 - #label - 1)) .. ">")
-        :setForeground(COLORS.text)
-        :setBackground(COLORS.bg)
+        :setForegroundColor(COLORS.text)
+        :setBackgroundColor(COLORS.bg)
 
       local capturedId = nodeId
       btn:onClick(function()
@@ -318,12 +323,11 @@ local function buildAreaScreen(frame, area, server, onNodeSelect)
       frame:addLabel()
         :setPosition(2, y)
         :setText(string.rep("\x8c", w - 3))
-        :setForeground(COLORS.bgPanel)
+        :setForegroundColor(COLORS.bgPanel)
       y = y + 1
     end
   end
 
-  -- Pinned metrics
   local pinned = getPinnedFor(area.id, server)
   if #pinned > 0 then
     y = y + 1
@@ -355,8 +359,8 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
     :setPosition(1, y)
     :setSize(10, 1)
     :setText("< Back")
-    :setForeground(COLORS.text)
-    :setBackground(COLORS.btnBack)
+    :setForegroundColor(COLORS.text)
+    :setBackgroundColor(COLORS.btnBack)
     :onClick(function()
       if onBack then onBack() end
     end)
@@ -364,16 +368,15 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
   frame:addLabel()
     :setPosition(12, y)
     :setText(statusIcon(status))
-    :setForeground(statusColor(status))
+    :setForegroundColor(statusColor(status))
 
   frame:addLabel()
     :setPosition(14, y)
     :setText(nodeDef.label or nodeId)
-    :setForeground(COLORS.text)
+    :setForegroundColor(COLORS.text)
 
   y = y + 2
 
-  -- Controls
   local controls = nodeDef.controls or {}
   if #controls > 0 then
     y = addDivider(frame, y, "Controls")
@@ -393,7 +396,7 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
         frame:addLabel()
           :setPosition(2, y)
           :setText(control.label or control.id)
-          :setForeground(disabled and COLORS.textDim or COLORS.textLabel)
+          :setForegroundColor(disabled and COLORS.textDim or COLORS.textLabel)
 
         if not disabled then
           local col = control.color == "red" and COLORS.crit or colors.blue
@@ -401,8 +404,8 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
             :setPosition(18, y)
             :setSize(12, 1)
             :setText("[ TRIGGER ]")
-            :setForeground(colors.white)
-            :setBackground(col)
+            :setForegroundColor(colors.white)
+            :setBackgroundColor(col)
 
           local capturedId = control.id
           btn:onClick(function()
@@ -412,14 +415,13 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
           frame:addLabel()
             :setPosition(18, y)
             :setText("[ ........ ]")
-            :setForeground(COLORS.sliderDis)
+            :setForegroundColor(COLORS.sliderDis)
         end
         y = y + 2
       end
     end
   end
 
-  -- Metrics
   local metricList = {}
   if ns and ns.metrics then
     for _, m in pairs(ns.metrics) do
@@ -438,7 +440,6 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
     end
   end
 
-  -- Pinned in
   local targets = getPinnedTargets(nodeDef)
   if #targets > 0 then
     y = y + 1
@@ -465,7 +466,7 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
       frame:addLabel()
         :setPosition(2, y)
         :setText(targetLabel .. ": " .. table.concat(pinnedHere, ", "))
-        :setForeground(COLORS.pinnedHdr)
+        :setForegroundColor(COLORS.pinnedHdr)
 
       y = y + 1
     end
@@ -481,26 +482,21 @@ local function buildMEScreen(frame, server)
   frame:addLabel()
     :setPosition(2, y)
     :setText("ME Network")
-    :setForeground(COLORS.text)
+    :setForegroundColor(COLORS.text)
 
   frame:addLabel()
     :setPosition(w - 3, y)
     :setText(statusIcon(status))
-    :setForeground(statusColor(status))
+    :setForegroundColor(statusColor(status))
 
   y = y + 2
 
-  local MT      = require("lib/metrics").TYPE
   local meOrder = { "me_energy", "me_usage", "me_items", "me_fluids" }
-
   for _, id in ipairs(meOrder) do
     local m = ns.metrics and ns.metrics[id]
-    if m then
-      y = addMetricBar(frame, y, m, nil)
-    end
+    if m then y = addMetricBar(frame, y, m, nil) end
   end
 
-  -- Watch items
   local watchItems = {}
   if ns.metrics then
     for id, m in pairs(ns.metrics) do
@@ -530,26 +526,25 @@ local function buildMEScreen(frame, server)
       frame:addLabel()
         :setPosition(2, y)
         :setText(m.label)
-        :setForeground(COLORS.textLabel)
+        :setForegroundColor(COLORS.textLabel)
 
       frame:addLabel()
         :setPosition(2 + barW + 2, y)
         :setText(val .. warn)
-        :setForeground(col)
+        :setForegroundColor(col)
 
       y = y + 1
 
       frame:addLabel()
         :setPosition(2, y)
         :setText(bar)
-        :setForeground(warn ~= "" and COLORS.barWarn or COLORS.barNormal)
-        :setBackground(COLORS.barBg)
+        :setForegroundColor(warn ~= "" and COLORS.barWarn or COLORS.barNormal)
+        :setBackgroundColor(COLORS.barBg)
 
       y = y + 2
     end
   end
 
-  -- Pinned from other nodes
   local pinned = getPinnedFor("me_network", server)
   if #pinned > 0 then
     y = y + 1
@@ -563,48 +558,55 @@ end
 
 
 -- Main UI Entry Point
+-- Basalt 1: addMonitor(name) for monitor frames, autoUpdate() for event loop
 
 function ui.run(server)
   local ok, basalt = pcall(require, "basalt")
   if not ok then
-    error("[ui] Basalt not found. Install from https://basalt.madefor.cc")
+    error("[ui] Basalt not found.")
   end
 
-  local monitor = peripheral.find("monitor")
-  if not monitor then
+  -- Find monitor peripheral name
+  local monitorName = peripheral.find and peripheral.getName(peripheral.find("monitor"))
+  if not monitorName then
+    -- fallback: scan sides
+    for _, side in ipairs({"top","bottom","left","right","front","back"}) do
+      if peripheral.getType(side) == "monitor" then
+        monitorName = side
+        break
+      end
+    end
+  end
+
+  if not monitorName then
     error("[ui] No monitor found.")
   end
-  monitor.setTextScale(0.5)
+
+  local mon = peripheral.wrap(monitorName)
+  mon.setTextScale(0.5)
+  local w, h = mon.getSize()
 
   local registry   = server.getRegistry()
   local areas      = registry.areas or {}
-  local w, h       = monitor.getSize()
   local TAB_H      = 2
   local contentH   = h - TAB_H
 
   local activeArea = areas[1] and areas[1].id or nil
   local activeNode = nil
 
-  -- All frames live here so we can clear and rebuild cleanly
-  local frames = {}
-
-  local function clearFrames()
-    for _, f in ipairs(frames) do
-      pcall(function() f:remove() end)
-    end
-    frames = {}
-  end
+  -- Basalt 1: addMonitor creates a frame bound to that monitor
+  local monFrame = basalt.addMonitor(monitorName)
+  monFrame:setBackground(COLORS.bg)
 
   local function rebuild()
-    clearFrames()
+    -- Remove all children and rebuild
+    monFrame:removeAll()
 
     -- ── Tab bar ──────────────────────────────────────────────
-    local tabBar = basalt.createFrame()
-      :setTerm(monitor)
+    local tabBar = monFrame:addFrame()
       :setPosition(1, 1)
       :setSize(w, 1)
       :setBackground(COLORS.bgTab)
-    frames[#frames + 1] = tabBar
 
     local x = 1
     for _, area in ipairs(areas) do
@@ -614,8 +616,8 @@ function ui.run(server)
         :setPosition(x, 1)
         :setSize(#label, 1)
         :setText(label)
-        :setForeground(isActive and COLORS.text or COLORS.textDim)
-        :setBackground(isActive and COLORS.bgTabActive or COLORS.bgTab)
+        :setForegroundColor(isActive and COLORS.text or COLORS.textDim)
+        :setBackgroundColor(isActive and COLORS.bgTabActive or COLORS.bgTab)
 
       local capturedId = area.id
       btn:onClick(function()
@@ -628,18 +630,17 @@ function ui.run(server)
     end
 
     -- ── Content frame ─────────────────────────────────────────
-    local content = basalt.createFrame()
-      :setTerm(monitor)
+    local content = monFrame:addFrame()
       :setPosition(1, TAB_H + 1)
       :setSize(w, contentH)
       :setBackground(COLORS.bg)
-    frames[#frames + 1] = content
 
     if activeArea == "me_network" then
-      local scroll = content:addScrollableFrame()
+      local scroll = content:addFrame()
         :setPosition(1, 1)
         :setSize(w, contentH)
         :setBackground(COLORS.bg)
+        :setScrollable(true)
       buildMEScreen(scroll, server)
 
     elseif activeNode then
@@ -655,10 +656,11 @@ function ui.run(server)
       end
 
       if area then
-        local scroll = content:addScrollableFrame()
+        local scroll = content:addFrame()
           :setPosition(1, 1)
           :setSize(w, contentH)
           :setBackground(COLORS.bg)
+          :setScrollable(true)
 
         buildAreaScreen(scroll, area, server, function(nodeId)
           activeNode = nodeId
@@ -677,9 +679,9 @@ function ui.run(server)
 
   rebuild()
 
-  -- Basalt 2: basalt.run() is the event loop, runs until program exits
+  -- Basalt 1: autoUpdate() is the blocking event loop
   parallel.waitForAny(
-    function() basalt.run() end,
+    function() basalt.autoUpdate() end,
     refreshLoop
   )
 end
