@@ -630,8 +630,7 @@ end
 
 local function buildTabBar(basalt, monitor, areas, activeAreaId, onTabSelect)
   local w, _  = monitor:getSize()
-  local tabBar = basalt.createFrame()
-    :setMonitor(monitor)
+  local tabBar = basalt:addFrame()
     :setPosition(1, 1)
     :setSize(w, 1)
     :setBackground(COLORS.bgTab)
@@ -699,8 +698,7 @@ function ui.run(server)
     end)
 
     -- Content frame
-    local content = basalt.createFrame()
-      :setMonitor(monitor)
+    local content = basalt:addFrame()
       :setPosition(1, TAB_H + 1)
       :setSize(w, contentH)
       :setBackground(COLORS.bg)
