@@ -116,9 +116,12 @@ local function checkAndUpdate(fileList)
     end
   end
 
-  print("[bootstrap] Done. Rebooting...")
+  print("[bootstrap] Done. Reboot now? [y/n]")
   os.sleep(1)
-  os.reboot()
+  local ans = read():lower()
+  if ans == "y" then
+    os.reboot()
+  end
 end
 
 
