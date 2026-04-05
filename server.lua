@@ -211,7 +211,7 @@ end
 
 -- ME Bridge Polling
 
-local meBridge = peripheral.find("meBridge")
+local meBridge = peripheral.find("me_bridge")
 
 local function pollME()
     if not meBridge then
