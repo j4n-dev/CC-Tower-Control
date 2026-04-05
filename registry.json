@@ -1,0 +1,156 @@
+{
+  "areas": [
+    {
+      "id": "tower",
+      "label": "Turm",
+      "nodes": [
+        "floor_01",
+        "floor_02",
+        "floor_03",
+        "floor_04",
+        "floor_05"
+      ]
+    },
+    {
+      "id": "me_network",
+      "label": "ME Network",
+      "nodes": [
+        "me_core"
+      ]
+    },
+    {
+      "id": "village_north",
+      "label": "Dorf Nord",
+      "nodes": [
+        "village_farm",
+        "village_smithy"
+      ]
+    }
+  ],
+
+  "nodes": [
+    {
+      "id": "floor_01",
+      "label": "Etage 1 - Lager",
+      "type": "floor",
+      "area": "tower",
+      "computerId": 3,
+      "controls": [
+        { "id": "light", "label": "Licht", "type": "toggle", "side": "top" },
+        { "id": "power", "label": "Strom", "type": "toggle", "side": "back" }
+      ],
+      "peripherals": [],
+      "pinMetrics": []
+    },
+    {
+      "id": "floor_02",
+      "label": "Etage 2 - Schmelze",
+      "type": "floor",
+      "area": "tower",
+      "computerId": 7,
+      "controls": [
+        { "id": "light",          "label": "Licht",     "type": "toggle",  "side": "top"   },
+        { "id": "power",          "label": "Strom",     "type": "toggle",  "side": "back"  },
+        { "id": "machines",       "label": "Maschinen", "type": "toggle",  "side": "left"  },
+        { "id": "emergency_stop", "label": "E-Stop",    "type": "trigger", "side": "right", "color": "red" }
+      ],
+      "peripherals": [
+        { "side": "front", "pType": "mekanismEnergyStorage", "role": "fe" }
+      ],
+      "pinMetrics": []
+    },
+    {
+      "id": "floor_03",
+      "label": "Etage 3 - Create",
+      "type": "floor",
+      "area": "tower",
+      "computerId": 11,
+      "controls": [
+        { "id": "light",    "label": "Licht",     "type": "toggle", "side": "top"  },
+        { "id": "power",    "label": "Strom",     "type": "toggle", "side": "back" },
+        { "id": "machines", "label": "Maschinen", "type": "toggle", "side": "left" }
+      ],
+      "peripherals": [
+        { "side": "bottom", "pType": "stressometer", "role": "create" }
+      ],
+      "pinMetrics": [
+        { "metricId": "su_stress", "to": "me_network" }
+      ]
+    },
+    {
+      "id": "floor_04",
+      "label": "Etage 4 - Leer",
+      "type": "floor",
+      "area": "tower",
+      "computerId": 14,
+      "controls": [
+        { "id": "light", "label": "Licht", "type": "toggle", "side": "top" },
+        { "id": "power", "label": "Strom", "type": "toggle", "side": "back" }
+      ],
+      "peripherals": [],
+      "pinMetrics": []
+    },
+    {
+      "id": "floor_05",
+      "label": "Etage 5 - Turbine",
+      "type": "floor",
+      "area": "tower",
+      "computerId": 17,
+      "controls": [
+        { "id": "light",   "label": "Licht",   "type": "toggle", "side": "top"  },
+        { "id": "turbine", "label": "Turbine", "type": "toggle", "side": "back", "invert": true }
+      ],
+      "peripherals": [
+        { "side": "front", "pType": "mekanismEnergyStorage", "role": "fe" }
+      ],
+      "pinMetrics": [
+        { "metricId": "fe_stored", "to": "me_network" },
+        { "metricId": "fe_input",  "to": "tower"      }
+      ]
+    },
+    {
+      "id": "me_core",
+      "label": "ME Kern",
+      "type": "me",
+      "area": "me_network",
+      "computerId": 15,
+      "controls": [],
+      "peripherals": [],
+      "pinMetrics": []
+    },
+    {
+      "id": "village_farm",
+      "label": "Farm",
+      "type": "building",
+      "area": "village_north",
+      "computerId": 20,
+      "controls": [
+        { "id": "power",    "label": "Strom",  "type": "toggle", "side": "back" },
+        { "id": "machines", "label": "Ernte",  "type": "toggle", "side": "left" }
+      ],
+      "peripherals": [],
+      "pinMetrics": []
+    },
+    {
+      "id": "village_smithy",
+      "label": "Schmiede",
+      "type": "building",
+      "area": "village_north",
+      "computerId": 21,
+      "controls": [
+        { "id": "light",    "label": "Licht",     "type": "toggle", "side": "top"  },
+        { "id": "power",    "label": "Strom",     "type": "toggle", "side": "back" },
+        { "id": "machines", "label": "Maschinen", "type": "toggle", "side": "left" }
+      ],
+      "peripherals": [],
+      "pinMetrics": []
+    }
+  ],
+
+  "watchItems": [
+    { "id": "iron",      "name": "minecraft:iron_ingot",      "label": "Iron Ingot",      "threshold": 1000 },
+    { "id": "gold",      "name": "minecraft:gold_ingot",      "label": "Gold Ingot",      "threshold": 500  },
+    { "id": "netherite", "name": "minecraft:netherite_ingot", "label": "Netherite Ingot", "threshold": 10   },
+    { "id": "obsidian",  "name": "minecraft:obsidian",        "label": "Obsidian",        "threshold": 256  }
+  ]
+}

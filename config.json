@@ -1,0 +1,6 @@
+{
+  "reportInterval":    10,
+  "degradedAfter":      1,
+  "unreachableAfter":   3,
+  "offlineAfter":       5
+}
