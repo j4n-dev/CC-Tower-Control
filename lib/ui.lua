@@ -14,9 +14,9 @@
 
 local ui = {}
 
--- ─────────────────────────────────────────
+
 -- Colors
--- ─────────────────────────────────────────
+
 local C = {
   bg          = colors.black,
   text        = colors.white,
@@ -69,9 +69,9 @@ local STATUS_COLOR = {
   offline     = C.offline,
 }
 
--- ─────────────────────────────────────────
+
 -- Draw helpers
--- ─────────────────────────────────────────
+
 local mon, W, H
 
 local function put(x, y, text, fg, bg)
@@ -170,10 +170,10 @@ local function drawMetric(y, m, sourceLabel)
   return y + 1  -- blank line between metrics
 end
 
--- ─────────────────────────────────────────
+
 -- Button registry
 -- Clickable regions stored per render cycle.
--- ─────────────────────────────────────────
+
 local buttons = {}  -- { x1, y1, x2, y2, action }
 
 local function addButton(x1, y1, x2, y2, action)
@@ -189,9 +189,9 @@ local function hitTest(mx, my)
   return nil
 end
 
--- ─────────────────────────────────────────
+
 -- Pinned metrics helpers
--- ─────────────────────────────────────────
+
 local function getPinnedFor(targetId, server)
   local result = {}
   for _, node in ipairs(server.getRegistry().nodes) do
@@ -221,10 +221,10 @@ local function getPinnedTargets(nodeDef)
   return targets
 end
 
--- ─────────────────────────────────────────
+
 -- Screen renderers
 -- Each returns the next unused y row.
--- ─────────────────────────────────────────
+
 
 local function drawAreaScreen(y, area, server, state, idx)
   -- All ON / All OFF buttons
@@ -446,9 +446,9 @@ local function drawMEScreen(y, server)
   return y
 end
 
--- ─────────────────────────────────────────
+
 -- Main render
--- ─────────────────────────────────────────
+
 local function render(server, areas, activeArea, activeNode, scrollY)
   mon.setBackgroundColor(C.bg)
   mon.clear()
@@ -759,9 +759,9 @@ local function render(server, areas, activeArea, activeNode, scrollY)
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Entry point
--- ─────────────────────────────────────────
+
 function ui.run(server)
   local monName = nil
   for _, side in ipairs({"top","bottom","left","right","front","back"}) do

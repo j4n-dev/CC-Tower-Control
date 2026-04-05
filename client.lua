@@ -1,17 +1,17 @@
 -- client.lua
 -- Generic Tower Control client.
 -- All hardware config comes from node.cfg.
--- Node monitor uses native CC monitor API only - no frameworks.
+-- Node monitor uses native CC monitor API only.
 local protocol = require("lib/protocol")
 local metrics = require("lib/metrics")
 
--- ─────────────────────────────────────────
+
 -- Config
--- ─────────────────────────────────────────
+
 local VERSION = "0.1.0"
 local CFG_FILE = "node.cfg"
-local REPORT_EVERY = 10
-local PING_EVERY = 30
+local REPORT_EVERY = 10 -- overridden by server config on register
+local PING_EVERY = 30 -- overridden by server config on register
 
 local function loadConfig()
     assert(fs.exists(CFG_FILE), "[client] node.cfg not found. Run bootstrap.lua.")
@@ -25,9 +25,16 @@ end
 
 local cfg = loadConfig()
 
--- ─────────────────────────────────────────
+
+-- Logging
+
+local function log(msg)
+    print("[client:" .. cfg.nodeId .. "] " .. msg)
+end
+
+
 -- Dynamic Control Handlers
--- ─────────────────────────────────────────
+
 local handlers = {}
 
 for _, control in ipairs(cfg.controls or {}) do
@@ -36,11 +43,14 @@ for _, control in ipairs(cfg.controls or {}) do
 
     if control.type == "toggle" then
         handlers[control.id] = function(value)
-            redstone.setOutput(side, invert and not value or value)
+            local actual = invert and not value or value
+            log("SET " .. control.id .. " = " .. tostring(value) .. " -> redstone " .. side .. " = " .. tostring(actual))
+            redstone.setOutput(side, actual)
         end
 
     elseif control.type == "trigger" then
         handlers[control.id] = function(_)
+            log("TRIGGER " .. control.id .. " on " .. side)
             redstone.setOutput(side, not invert)
             os.sleep(0.5)
             redstone.setOutput(side, invert)
@@ -48,9 +58,9 @@ for _, control in ipairs(cfg.controls or {}) do
     end
 end
 
--- ─────────────────────────────────────────
+
 -- Metric Collection
--- ─────────────────────────────────────────
+
 local function collectMetrics()
     local result = {}
 
@@ -67,6 +77,7 @@ local function collectMetrics()
         end
     end
 
+    -- Current logical state of all toggle controls
     for _, control in ipairs(cfg.controls or {}) do
         if control.type == "toggle" then
             local raw = redstone.getOutput(control.side)
@@ -78,11 +89,11 @@ local function collectMetrics()
     return result
 end
 
--- ─────────────────────────────────────────
+
 -- Registration
--- ─────────────────────────────────────────
+
 local function register()
-    print("[client] Registering as " .. cfg.nodeId .. "...")
+    log("Registering with server #" .. cfg.serverId .. "...")
     local msg = protocol.msgRegister(cfg.nodeId)
     msg.label = cfg.label
     msg.area = cfg.area
@@ -90,50 +101,73 @@ local function register()
     msg.controls = cfg.controls
     msg.peripherals = cfg.peripherals
 
+    log("SEND register -> " .. cfg.serverId)
     local response = protocol.sendAndWait(cfg.serverId, msg, 10)
+
     if response and response.ok then
-        print("[client] Registered.")
+        log("RECV register ACK from server")
+        if response.config then
+            REPORT_EVERY = response.config.reportInterval or REPORT_EVERY
+            PING_EVERY = math.max(REPORT_EVERY * 3, 30)
+            log("Report interval set to " .. REPORT_EVERY .. "s, ping every " .. PING_EVERY .. "s")
+        end
     else
-        print("[client] No server response - will retry on next report.")
+        log("No register ACK - continuing anyway")
     end
 end
 
--- ─────────────────────────────────────────
+
 -- Message Handler
--- ─────────────────────────────────────────
+
 local function handleMessage(senderId, msg)
     if not protocol.isValid(msg) then
+        log("RECV invalid message from #" .. tostring(senderId))
         return
     end
+
     local A = protocol.ACTION
+    log("RECV " .. tostring(msg.action) .. " from #" .. senderId)
 
     if msg.action == A.SET then
         local handler = handlers[msg.capability]
         if handler then
             local ok, err = pcall(handler, msg.value)
-            protocol.send(senderId, protocol.msgAck(cfg.nodeId, ok, ok and "ok" or tostring(err)))
+            local ack = protocol.msgAck(cfg.nodeId, ok, ok and "ok" or tostring(err))
+            log("SEND ack (ok=" .. tostring(ok) .. ") -> #" .. senderId)
+            protocol.send(senderId, ack)
         else
+            log("Unknown capability: " .. tostring(msg.capability))
             protocol.send(senderId, protocol.msgAck(cfg.nodeId, false, "unknown: " .. tostring(msg.capability)))
         end
 
     elseif msg.action == A.QUERY then
+        log("SEND report (query) -> #" .. senderId)
         protocol.send(senderId, protocol.msgReport(cfg.nodeId, collectMetrics()))
 
     elseif msg.action == A.PING then
+        log("SEND pong -> #" .. senderId)
         protocol.send(senderId, protocol.msgPong(cfg.nodeId))
 
     elseif msg.action == A.UPDATE then
-        print("[client] Update requested. Rebooting...")
+        log("Update requested. Rebooting...")
         os.sleep(1)
         os.reboot()
     end
 end
 
--- ─────────────────────────────────────────
+
+-- Shared state for monitor rendering
+-- monitorLoop reads this, networkLoop writes it
+
+local monitorNeedsRender = false -- set true when new data arrives
+
+
 -- Network Loop
--- ─────────────────────────────────────────
+
 local function sendReport()
+    log("SEND report -> #" .. cfg.serverId)
     protocol.send(cfg.serverId, protocol.msgReport(cfg.nodeId, collectMetrics()))
+    monitorNeedsRender = true
 end
 
 local function networkLoop()
@@ -144,24 +178,28 @@ local function networkLoop()
         local senderId, msg = protocol.receive(1)
         if senderId and msg then
             handleMessage(senderId, msg)
+            monitorNeedsRender = true
         end
 
         local now = os.clock()
         if now - lastReport >= REPORT_EVERY then
-            sendReport();
+            sendReport()
             lastReport = now
         end
         if now - lastPing >= PING_EVERY then
+            log("SEND ping -> #" .. cfg.serverId)
             protocol.send(cfg.serverId, protocol.msgPing(cfg.nodeId))
             lastPing = now
         end
     end
 end
 
--- ─────────────────────────────────────────
+
 -- Node Monitor UI
--- Native CC monitor API. No frameworks.
--- ─────────────────────────────────────────
+-- Native CC monitor API only.
+-- Runs in parallel with networkLoop via parallel.waitForAny.
+-- Uses os.startTimer so it doesn't block the event loop.
+
 local function monitorLoop()
     local monSide = cfg.nodeMonitorSide
     if not monSide then
@@ -170,10 +208,11 @@ local function monitorLoop()
 
     local mon = peripheral.wrap(monSide)
     if not mon then
-        print("[client] Monitor '" .. monSide .. "' not found.")
+        log("Monitor '" .. monSide .. "' not found.")
         return
     end
 
+    log("Node monitor on " .. monSide)
     mon.setTextScale(0.5)
     local W, H = mon.getSize()
 
@@ -184,7 +223,6 @@ local function monitorLoop()
         divider = colors.lightGray,
         on = colors.green,
         off = colors.red,
-        dis = colors.gray,
         barFill = colors.lime,
         barWarn = colors.yellow,
         barCrit = colors.red,
@@ -220,7 +258,6 @@ local function monitorLoop()
         end
     end
 
-    -- Button registry for touch input
     local buttons = {}
     local function addBtn(x1, y1, x2, y2, action)
         buttons[#buttons + 1] = {
@@ -240,6 +277,7 @@ local function monitorLoop()
     end
 
     local function render()
+        log("Monitor render")
         mon.setBackgroundColor(C.bg)
         mon.clear()
         buttons = {}
@@ -266,24 +304,29 @@ local function monitorLoop()
                 put(2, y, control.label or control.id, C.text, C.bg)
 
                 if control.type == "toggle" then
+                    -- Read current state at render time
                     local raw = redstone.getOutput(control.side)
                     local isOn = control.invert and not raw or raw
+
                     local sliderText = isOn and "[\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x95 ON ]" or
                                            "[OFF \x95\x8c\x8c\x8c\x8c\x8c\x8c\x8c ]"
                     local sx = W - #sliderText
                     put(sx, y, sliderText, isOn and C.on or C.off, C.bg)
 
-                    local cc = control
+                    -- Capture isOn at button-creation time
+                    local capturedIsOn = isOn
+                    local capturedControl = control
                     addBtn(sx, y, W, y, function()
-                        local newVal = not (control.invert and not redstone.getOutput(cc.side) or
-                                           redstone.getOutput(cc.side))
-                        local handler = handlers[cc.id]
+                        local newVal = not capturedIsOn
+                        log("Monitor toggle " .. capturedControl.id .. " -> " .. tostring(newVal))
+                        local handler = handlers[capturedControl.id]
                         if handler then
                             pcall(handler, newVal)
+                            -- Notify server to keep state in sync
                             protocol.send(cfg.serverId, {
                                 action = protocol.ACTION.ACK,
                                 nodeId = cfg.nodeId,
-                                capability = cc.id,
+                                capability = capturedControl.id,
                                 value = newVal,
                                 ok = true
                             })
@@ -293,12 +336,13 @@ local function monitorLoop()
 
                 elseif control.type == "trigger" then
                     local trigLabel = "[ TRIGGER ]"
-                    local bg = control.color == "red" and C.triggerR or C.trigger
+                    local trigBg = control.color == "red" and C.triggerR or C.trigger
                     local tx = W - #trigLabel
-                    put(tx, y, trigLabel, colors.white, bg)
-                    local cc = control
+                    put(tx, y, trigLabel, colors.white, trigBg)
+                    local capturedControl = control
                     addBtn(tx, y, W, y, function()
-                        local handler = handlers[cc.id]
+                        log("Monitor trigger " .. capturedControl.id)
+                        local handler = handlers[capturedControl.id]
                         if handler then
                             pcall(handler, true)
                         end
@@ -354,7 +398,8 @@ local function monitorLoop()
 
     render()
 
-    local refreshTimer = os.startTimer(5)
+    -- Use os.startTimer so we yield properly and don't starve networkLoop
+    local refreshTimer = os.startTimer(REPORT_EVERY)
 
     while true do
         local event, p1, p2, p3 = os.pullEvent()
@@ -367,20 +412,29 @@ local function monitorLoop()
 
         elseif event == "timer" and p1 == refreshTimer then
             render()
-            refreshTimer = os.startTimer(5)
+            refreshTimer = os.startTimer(REPORT_EVERY)
         end
     end
 end
 
--- ─────────────────────────────────────────
+
 -- Main
--- ─────────────────────────────────────────
-print("[client] Tower Control Client v" .. VERSION)
-print("[client] Node: " .. cfg.nodeId .. " (\"" .. (cfg.label or "") .. "\")")
-print("[client] Monitor: " .. (cfg.nodeMonitorSide or "none"))
+
+log("Tower Control Client v" .. VERSION)
+log("Label: " .. (cfg.label or "?") .. ", Area: " .. (cfg.area or "?"))
+log("Server ID: " .. cfg.serverId)
+log("Monitor: " .. (cfg.nodeMonitorSide or "none"))
+log("Controls: " .. #(cfg.controls or {}))
+log("Peripherals: " .. #(cfg.peripherals or {}))
 
 protocol.open()
 register()
 sendReport()
 
-parallel.waitForAny(networkLoop, monitorLoop)
+if cfg.nodeMonitorSide and peripheral.wrap(cfg.nodeMonitorSide) then
+    log("Starting with monitor loop")
+    parallel.waitForAny(networkLoop, monitorLoop)
+else
+    log("Starting network loop only")
+    networkLoop()
+end

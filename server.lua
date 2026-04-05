@@ -5,9 +5,9 @@
 local protocol = require("lib/protocol")
 local metrics = require("lib/metrics")
 
--- ─────────────────────────────────────────
+
 -- Constants
--- ─────────────────────────────────────────
+
 local VERSION = "0.1.0"
 local REGISTRY_FILE = "registry.json"
 local CONFIG_FILE = "config.json"
@@ -19,9 +19,9 @@ local STATUS = {
     OFFLINE = "offline"
 }
 
--- ─────────────────────────────────────────
+
 -- Config
--- ─────────────────────────────────────────
+
 local function loadConfig()
     if not fs.exists(CONFIG_FILE) then
         return {
@@ -49,9 +49,9 @@ local function getThresholds(nodeDef)
     }
 end
 
--- ─────────────────────────────────────────
+
 -- Registry
--- ─────────────────────────────────────────
+
 local function loadRegistry()
     if not fs.exists(REGISTRY_FILE) then
         return {
@@ -87,9 +87,9 @@ end
 
 local nodeIndex = buildNodeIndex(registry)
 
--- ─────────────────────────────────────────
+
 -- Auto-Discovery
--- ─────────────────────────────────────────
+
 local function findOrCreateNode(nodeId, computerId, regMsg)
     if nodeIndex[nodeId] then
         nodeIndex[nodeId].computerId = computerId
@@ -132,9 +132,9 @@ local function findOrCreateNode(nodeId, computerId, regMsg)
     return nodeDef
 end
 
--- ─────────────────────────────────────────
+
 -- Runtime State
--- ─────────────────────────────────────────
+
 local state = {}
 
 local function ensureNodeState(nodeId, computerId)
@@ -168,9 +168,9 @@ local function updateMetrics(nodeId, metricList)
     end
 end
 
--- ─────────────────────────────────────────
+
 -- Status Watchdog
--- ─────────────────────────────────────────
+
 local function runWatchdog()
     local nowMs = os.epoch("utc")
 
@@ -208,9 +208,9 @@ local function runWatchdog()
     end
 end
 
--- ─────────────────────────────────────────
+
 -- ME Bridge Polling
--- ─────────────────────────────────────────
+
 local meBridge = peripheral.find("meBridge")
 
 local function pollME()
@@ -235,9 +235,9 @@ local function pollME()
     end
 end
 
--- ─────────────────────────────────────────
+
 -- Control Commands
--- ─────────────────────────────────────────
+
 local function sendControl(nodeId, capability, value)
     local s = state[nodeId]
     if not s then
@@ -252,13 +252,18 @@ local function sendControl(nodeId, capability, value)
         return false, "No computerId for node"
     end
 
+    print("[server] SEND set " .. capability .. "=" .. tostring(value) .. " -> #" .. s.computerId .. " (" .. nodeId ..
+              ")")
     local response = protocol.sendAndWait(s.computerId, protocol.msgSet(capability, value), 5)
 
     if response and response.ok then
         s.controls[capability] = value
+        print("[server] RECV ack ok for " .. capability .. " on " .. nodeId)
         return true, "ok"
     else
-        return false, (response and response.message) or "timeout"
+        local reason = (response and response.message) or "timeout"
+        print("[server] RECV ack FAIL for " .. capability .. " on " .. nodeId .. ": " .. reason)
+        return false, reason
     end
 end
 
@@ -273,13 +278,17 @@ local function sendControlToArea(areaId, capability, value)
     end
 end
 
--- ─────────────────────────────────────────
+
 -- Message Handler
--- ─────────────────────────────────────────
+
 local function handleMessage(senderId, msg)
     if not protocol.isValid(msg) then
+        print("[server] RECV invalid message from #" .. tostring(senderId))
         return
     end
+
+    print("[server] RECV " .. tostring(msg.action) .. " from #" .. senderId ..
+              (msg.nodeId and (" (" .. msg.nodeId .. ")") or ""))
 
     local A = protocol.ACTION
 
@@ -287,12 +296,15 @@ local function handleMessage(senderId, msg)
         local nodeId = msg.nodeId
         local nodeDef = findOrCreateNode(nodeId, senderId, msg)
         markSeen(nodeId, senderId)
-        protocol.send(senderId, {
+        local ack = {
             action = A.ACK,
             ok = true,
             message = "registered",
-            nodeDef = nodeDef
-        })
+            nodeDef = nodeDef,
+            config = config
+        }
+        print("[server] SEND register ACK -> #" .. senderId)
+        protocol.send(senderId, ack)
 
     elseif msg.action == A.REPORT then
         markSeen(msg.nodeId, senderId)
@@ -321,9 +333,9 @@ local function handleMessage(senderId, msg)
     end
 end
 
--- ─────────────────────────────────────────
+
 -- Public API (used by ui.lua)
--- ─────────────────────────────────────────
+
 local server = {}
 
 function server.getRegistry()
@@ -364,9 +376,9 @@ end
 server.sendControl = sendControl
 server.sendControlToArea = sendControlToArea
 
--- ─────────────────────────────────────────
+
 -- Main
--- ─────────────────────────────────────────
+
 print("[server] Tower Control Server v" .. VERSION)
 protocol.open()
 
