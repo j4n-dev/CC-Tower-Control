@@ -13,10 +13,10 @@ local VERSION_URL = GITHUB_RAW .. "/version"
 
 -- Both clients and server get ui.lua - clients need it for node monitors
 local CLIENT_FILES = {"lib/protocol.lua", "lib/metrics.lua", "lib/ui.lua", "client.lua", "setup.lua", "config.json",
-                      "version"}
+                      "version", "uninstall.lua"}
 
 local SERVER_FILES = {"lib/protocol.lua", "lib/metrics.lua", "lib/ui.lua", "server.lua", "setup.lua", "config.json",
-                      "version"}
+                      "version", "uninstall.lua"}
 
 -- Helpers
 
