@@ -74,7 +74,10 @@ end
 
 local function ensureBasalt()
   print("[bootstrap] Checking Basalt installation...")
-  if fs.exists("basalt.lua") then return end
+  if fs.exists("basalt.lua") then
+    print("[bootstrap] Basalt already installed, skipping.")
+    return
+  end
   print("[bootstrap] Basalt not found. Installing Basalt UI library...")
   local body = httpGet("https://raw.githubusercontent.com/Pyroxenium/Basalt/refs/heads/master/docs/install.lua")
   if not body then
@@ -86,8 +89,6 @@ local function ensureBasalt()
   shell.run("basalt_install.lua release")
   fs.delete("basalt_install.lua")
   print("[bootstrap] Basalt installed.")
-  else
-    print("[bootstrap] Basalt already installed.")
 end
 
 
