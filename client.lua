@@ -1,7 +1,7 @@
 -- client.lua
 -- Generic Tower Control client.
 -- All hardware config (sides, labels, peripherals) comes from node.cfg.
--- If a node monitor is configured, renders a locked single-node UI via Basalt.
+-- If a node monitor is configured, renders a locked single-node UI via Basalt 2.
 -- Controls on the monitor are executed locally (no server round-trip needed).
 
 local protocol = require("lib/protocol")
@@ -92,12 +92,12 @@ end
 local function register()
   print("[client] Registering as " .. cfg.nodeId .. "...")
 
-  local msg        = protocol.msgRegister(cfg.nodeId)
-  msg.label        = cfg.label
-  msg.area         = cfg.area
-  msg.nodeType     = cfg.nodeType or "generic"
-  msg.controls     = cfg.controls
-  msg.peripherals  = cfg.peripherals
+  local msg       = protocol.msgRegister(cfg.nodeId)
+  msg.label       = cfg.label
+  msg.area        = cfg.area
+  msg.nodeType    = cfg.nodeType or "generic"
+  msg.controls    = cfg.controls
+  msg.peripherals = cfg.peripherals
 
   local response = protocol.sendAndWait(cfg.serverId, msg, 10)
 
@@ -177,7 +177,7 @@ end
 
 
 -- Node Monitor UI
--- Locked to this node. Controls are applied locally.
+-- Locked to this node. Controls applied locally.
 -- Refreshes every 5 seconds.
 
 local function monitorLoop()
@@ -199,7 +199,6 @@ local function monitorLoop()
   mon.setTextScale(0.5)
   local w, h = mon.getSize()
 
-  -- Colors
   local C = {
     bg       = colors.black,
     text     = colors.white,
@@ -214,46 +213,45 @@ local function monitorLoop()
     warn     = colors.yellow,
   }
 
-  local STATUS_ICON  = { online="*", degraded="~", unreachable="o", offline="X" }
-  local STATUS_COLOR = {
-    online      = colors.green,
-    degraded    = colors.yellow,
-    unreachable = colors.orange,
-    offline     = colors.red,
-  }
-
   local function formatNum(n)
-    if n >= 1000000 then return string.format("%.1fM", n/1000000)
-    elseif n >= 1000 then return string.format("%.1fk", n/1000)
+    if n >= 1000000 then return string.format("%.1fM", n / 1000000)
+    elseif n >= 1000 then return string.format("%.1fk", n / 1000)
     else return tostring(math.floor(n)) end
   end
 
+  -- Holds the current Basalt frame so we can remove it on rebuild
+  local currentFrame = nil
+
   local function render()
+    -- Remove previous frame cleanly
+    if currentFrame then
+      pcall(function() currentFrame:remove() end)
+      currentFrame = nil
+    end
+
     mon.setBackgroundColor(C.bg)
     mon.clear()
 
-    local frame = basalt.addFrame()
-      :setMonitor(mon)
+    local frame = basalt.createFrame()
+      :setTerm(mon)
       :setPosition(1, 1)
       :setSize(w, h)
       :setBackground(C.bg)
+    currentFrame = frame
 
     local y = 1
-
-    -- Header: status icon + label
     local currentMetrics = collectMetrics()
 
-    -- Find online status from toggle metrics (best proxy we have locally)
-    -- Node is always "online" from its own perspective
+    -- Header
     frame:addLabel()
       :setPosition(2, y)
       :setText("*")
-      :setForegroundColor(colors.green)
+      :setForeground(colors.green)
 
     frame:addLabel()
       :setPosition(4, y)
       :setText(cfg.label or cfg.nodeId)
-      :setForegroundColor(C.text)
+      :setForeground(C.text)
 
     y = y + 2
 
@@ -261,7 +259,7 @@ local function monitorLoop()
     frame:addLabel()
       :setPosition(1, y)
       :setText(string.rep("\x8c", w))
-      :setForegroundColor(C.divider)
+      :setForeground(C.divider)
     y = y + 1
 
     -- Controls
@@ -269,26 +267,25 @@ local function monitorLoop()
       frame:addLabel()
         :setPosition(2, y)
         :setText("Controls")
-        :setForegroundColor(C.dim)
+        :setForeground(C.dim)
       y = y + 1
 
       for _, control in ipairs(cfg.controls or {}) do
         if control.type == "toggle" then
-          -- Get current logical state
-          local raw     = redstone.getOutput(control.side)
-          local isOn    = control.invert and not raw or raw
+          local raw  = redstone.getOutput(control.side)
+          local isOn = control.invert and not raw or raw
 
           frame:addLabel()
             :setPosition(2, y)
             :setText(control.label or control.id)
-            :setForegroundColor(C.text)
+            :setForeground(C.text)
 
           local sliderText, sliderCol
           if isOn then
-            sliderText = "[\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x95 AN ]"
+            sliderText = "[\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x95 ON ]"
             sliderCol  = C.sliderOn
           else
-            sliderText = "[AUS \x95\x8c\x8c\x8c\x8c\x8c\x8c\x8c ]"
+            sliderText = "[OFF \x95\x8c\x8c\x8c\x8c\x8c\x8c\x8c ]"
             sliderCol  = C.sliderOff
           end
 
@@ -296,10 +293,9 @@ local function monitorLoop()
             :setPosition(w - #sliderText - 1, y)
             :setSize(#sliderText, 1)
             :setText(sliderText)
-            :setForegroundColor(sliderCol)
-            :setBackgroundColor(C.bg)
+            :setForeground(sliderCol)
+            :setBackground(C.bg)
 
-          -- Capture loop variables
           local capturedControl = control
           local capturedIsOn    = isOn
           btn:onClick(function()
@@ -307,7 +303,7 @@ local function monitorLoop()
             local handler = handlers[capturedControl.id]
             if handler then
               pcall(handler, newVal)
-              -- Also notify server so its state stays in sync
+              -- Notify server to keep its state in sync
               protocol.send(cfg.serverId, {
                 action     = protocol.ACTION.ACK,
                 nodeId     = cfg.nodeId,
@@ -315,7 +311,7 @@ local function monitorLoop()
                 value      = newVal,
                 ok         = true,
               })
-              render()  -- re-render immediately after toggle
+              render()
             end
           end)
 
@@ -325,15 +321,15 @@ local function monitorLoop()
           frame:addLabel()
             :setPosition(2, y)
             :setText(control.label or control.id)
-            :setForegroundColor(C.text)
+            :setForeground(C.text)
 
           local col = control.color == "red" and C.barCrit or colors.blue
           local btn = frame:addButton()
             :setPosition(w - 14, y)
             :setSize(12, 1)
-            :setText("[AUSLOESEN]")
-            :setForegroundColor(colors.white)
-            :setBackgroundColor(col)
+            :setText("[ TRIGGER ]")
+            :setForeground(colors.white)
+            :setBackground(col)
 
           local capturedControl = control
           btn:onClick(function()
@@ -352,18 +348,17 @@ local function monitorLoop()
     frame:addLabel()
       :setPosition(1, y)
       :setText(string.rep("\x8c", w))
-      :setForegroundColor(C.divider)
+      :setForeground(C.divider)
     y = y + 1
 
     -- Metrics
-    local MT = metrics.TYPE
+    local MT         = metrics.TYPE
     local hasMetrics = false
 
     for _, m in ipairs(currentMetrics) do
       if m.type ~= MT.TOGGLE then
         hasMetrics = true
 
-        -- Label + value on one line
         local valStr
         if m.type == MT.BAR and m.max and m.max > 0 then
           local pct = math.floor((m.value / m.max) * 100)
@@ -378,16 +373,15 @@ local function monitorLoop()
         frame:addLabel()
           :setPosition(2, y)
           :setText(m.label)
-          :setForegroundColor(C.text)
+          :setForeground(C.text)
 
         frame:addLabel()
           :setPosition(w - #valStr - 1, y)
           :setText(valStr)
-          :setForegroundColor(C.dim)
+          :setForeground(C.dim)
 
         y = y + 1
 
-        -- Progress bar for BAR type
         if m.type == MT.BAR and m.max and m.max > 0 then
           local barW   = w - 2
           local ratio  = m.value / m.max
@@ -395,8 +389,7 @@ local function monitorLoop()
           filled       = math.max(0, math.min(barW, filled))
           local bar    = string.rep("\x8f", filled) .. string.rep("\x8c", barW - filled)
 
-          local ms = metrics
-          local st = ms.status(m)
+          local st     = metrics.status(m)
           local barCol = st == "crit" and C.barCrit or
                          st == "warn" and C.barWarn or
                          C.barNorm
@@ -404,33 +397,36 @@ local function monitorLoop()
           frame:addLabel()
             :setPosition(2, y)
             :setText(bar)
-            :setForegroundColor(barCol)
-            :setBackgroundColor(C.barBg)
+            :setForeground(barCol)
+            :setBackground(C.barBg)
 
           y = y + 1
         end
 
-        y = y + 1  -- spacing between metrics
+        y = y + 1
       end
     end
 
     if not hasMetrics then
       frame:addLabel()
         :setPosition(2, y)
-        :setText("Keine Metriken.")
-        :setForegroundColor(C.dim)
+        :setText("No metrics.")
+        :setForeground(C.dim)
     end
-
-    basalt.autoUpdate()
   end
 
-  -- Initial render + refresh loop
   render()
 
-  while true do
-    os.sleep(5)
-    render()
-  end
+  -- Refresh loop + Basalt event loop in parallel
+  parallel.waitForAny(
+    function() basalt.run() end,
+    function()
+      while true do
+        os.sleep(5)
+        render()
+      end
+    end
+  )
 end
 
 
@@ -438,23 +434,10 @@ end
 
 print("[client] Tower Control Client v" .. VERSION)
 print("[client] Node: " .. cfg.nodeId .. " (\"" .. (cfg.label or "") .. "\")")
-
-if cfg.nodeMonitorSide then
-  print("[client] Node monitor: " .. cfg.nodeMonitorSide)
-else
-  print("[client] No node monitor configured.")
-end
+print("[client] Monitor: " .. (cfg.nodeMonitorSide or "none"))
 
 protocol.open()
 register()
-
--- Initial metric report
-local function sendReport()
-  protocol.send(cfg.serverId, protocol.msgReport(cfg.nodeId, collectMetrics()))
-end
 sendReport()
 
--- Run network loop and monitor UI in parallel.
--- If no monitor is configured, monitorLoop returns immediately
--- and parallel just runs networkLoop alone.
 parallel.waitForAny(networkLoop, monitorLoop)
