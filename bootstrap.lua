@@ -73,7 +73,7 @@ end
 local function ensureBasalt()
   if fs.exists("basalt.lua") then return end
   print("[bootstrap] Installing Basalt...")
-  local body = httpGet("https://basalt.madefor.cc/install.lua")
+  local body = httpGet("https://raw.githubusercontent.com/Pyroxenium/Basalt/refs/heads/master/docs/install.lua release")
   if not body then
     print("[bootstrap] Could not reach Basalt CDN – UI will be unavailable.")
     print("[bootstrap] Continuing without Basalt...")

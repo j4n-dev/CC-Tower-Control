@@ -115,7 +115,7 @@ local function configurePeripherals(found)
   local monitors   = {}
 
   if #found == 0 then
-    print("  Keine Peripherals gefunden.")
+    print("  No peripherals found.")
     return configured, monitors
   end
 
@@ -127,15 +127,15 @@ local function configurePeripherals(found)
 
     if category == "modem" then
       -- Skip silently – just note it
-      print("  " .. p.side .. "  [" .. p.pType .. "]  → Netzwerk-Modem (automatisch)")
+      print("  " .. p.side .. "  [" .. p.pType .. "]  → Network modem (automatic)")
 
     elseif category == "monitor" then
       -- Monitors are handled separately below
-      print("  " .. p.side .. "  [monitor]  → Display erkannt")
+      print("  " .. p.side .. "  [monitor]  → Display detected")
       monitors[#monitors + 1] = { side = p.side }
 
     elseif category == "metric" then
-      io.write("  " .. p.side .. "  [" .. p.pType .. "]  → Rolle? ")
+      io.write("  " .. p.side .. "  [" .. p.pType .. "]  → Role? ")
       io.write("[" .. table.concat(METRIC_ROLES, "/") .. "]: ")
       local role = read():lower()
 
@@ -174,16 +174,16 @@ local function configureMonitors(monitors)
   local nodeMonitor = nil
 
   for _, m in ipairs(monitors) do
-    print("  Monitor gefunden: " .. m.side)
-    local use = promptYN("  Als Node-Display verwenden?", true)
+    print("  Monitor found: " .. m.side)
+    local use = promptYN("  Use as node display?", true)
     if use then
       -- Only one node monitor per client
       nodeMonitor = m.side
-      print("  → Node-Display aktiviert auf Seite: " .. m.side)
+      print("  → Node display activated on side: " .. m.side)
       -- Only ask about the first monitor; extras are ignored
       break
     else
-      print("  → Ignoriert.")
+      print("  → Ignored.")
     end
   end
 
@@ -201,17 +201,17 @@ local function configureSides(occupied)
 
   for _, side in ipairs(SIDES) do
     if occupied[side] then
-      print("  " .. side .. "  → belegt von [" .. occupied[side] .. "], skip")
+      print("  " .. side .. "  → occupied by [" .. occupied[side] .. "], skip")
     else
-      local use = promptYN("  " .. side .. "  → Als Control verwenden?", false)
+      local use = promptYN("  " .. side .. "  → Use as control?", false)
       if use then
         print("")
-        local id     = prompt("    ID (z.B. light, power, machines)")
-        local label  = prompt("    Label (Anzeigename)", id)
-        local cType  = choose("    Typ", { "toggle", "trigger" })
+        local id     = prompt("    ID (e.g. light, power, machines)")
+        local label  = prompt("    Label (display name)", id)
+        local cType  = choose("    Type", { "toggle", "trigger" })
         local invert = false
         if cType == "toggle" then
-          invert = promptYN("    Invertiert? (OFF = Redstone an)", false)
+          invert = promptYN("    Inverted? (OFF = Redstone on)", false)
         end
 
         controls[#controls + 1] = {
@@ -238,18 +238,18 @@ function setup.run()
   print("")
 
   -- 1. Identity
-  local label  = prompt("Node Label (z.B. 'Etage 2 - Schmelze')")
-  local area   = prompt("Area (z.B. tower, village_north)")
+  local label  = prompt("Node Label (e.g. 'Floor 2 - Smelting')")
+  local area   = prompt("Area (e.g. tower, village_north)")
   local nodeId = prompt("Node ID", slugify(label))
 
   print("")
   print("Server Computer ID:")
-  print("  (Oeffne den Server-Computer und fuehre 'id' aus)")
+  print("  (Open the server computer and run 'id')")
   local serverId = tonumber(prompt("Server ID"))
 
   -- 2. Peripheral scan
   print("")
-  print("Scanne Peripherals...")
+  print("Scanning peripherals...")
   local found, occupied = scanPeripherals()
 
   -- 3. Configure metric peripherals + detect monitors
@@ -267,7 +267,7 @@ function setup.run()
 
   -- 6. Summary
   print("")
-  header("Zusammenfassung")
+  header("Summary")
   print("  Node ID:      " .. nodeId)
   print("  Label:        " .. label)
   print("  Area:         " .. area)
@@ -275,15 +275,15 @@ function setup.run()
   print("  Controls:     " .. #controls)
   print("  Peripherals:  " .. #peripherals)
   if nodeMonitorSide then
-    print("  Node-Display: " .. nodeMonitorSide)
+    print("  Node Display: " .. nodeMonitorSide)
   else
-    print("  Node-Display: keiner")
+    print("  Node Display: none")
   end
   print("")
 
-  local confirm = promptYN("Konfiguration speichern?", true)
+  local confirm = promptYN("Save configuration?", true)
   if not confirm then
-    print("Abgebrochen. Setup wird beim naechsten Boot erneut gestartet.")
+    print("Cancelled. Setup will run again on next boot.")
     return nil
   end
 

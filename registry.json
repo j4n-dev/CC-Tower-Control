@@ -2,7 +2,7 @@
   "areas": [
     {
       "id": "tower",
-      "label": "Turm",
+      "label": "Tower",
       "nodes": [
         "floor_01",
         "floor_02",
@@ -20,7 +20,7 @@
     },
     {
       "id": "village_north",
-      "label": "Dorf Nord",
+      "label": "Village North",
       "nodes": [
         "village_farm",
         "village_smithy"
@@ -31,28 +31,28 @@
   "nodes": [
     {
       "id": "floor_01",
-      "label": "Etage 1 - Lager",
+      "label": "Floor 1 - Storage",
       "type": "floor",
       "area": "tower",
       "computerId": 3,
       "controls": [
-        { "id": "light", "label": "Licht", "type": "toggle", "side": "top" },
-        { "id": "power", "label": "Strom", "type": "toggle", "side": "back" }
+        { "id": "light", "label": "Light", "type": "toggle", "side": "top" },
+        { "id": "power", "label": "Power", "type": "toggle", "side": "back" }
       ],
       "peripherals": [],
       "pinMetrics": []
     },
     {
       "id": "floor_02",
-      "label": "Etage 2 - Schmelze",
+      "label": "Floor 2 - Smelting",
       "type": "floor",
       "area": "tower",
       "computerId": 7,
       "controls": [
-        { "id": "light",          "label": "Licht",     "type": "toggle",  "side": "top"   },
-        { "id": "power",          "label": "Strom",     "type": "toggle",  "side": "back"  },
-        { "id": "machines",       "label": "Maschinen", "type": "toggle",  "side": "left"  },
-        { "id": "emergency_stop", "label": "E-Stop",    "type": "trigger", "side": "right", "color": "red" }
+        { "id": "light",          "label": "Light",     "type": "toggle",  "side": "top"   },
+        { "id": "power",          "label": "Power",     "type": "toggle",  "side": "back"  },
+        { "id": "machines",       "label": "Machines", "type": "toggle",  "side": "left"  },
+        { "id": "emergency_stop", "label": "E-Stop",   "type": "trigger", "side": "right", "color": "red" }
       ],
       "peripherals": [
         { "side": "front", "pType": "mekanismEnergyStorage", "role": "fe" }
@@ -61,14 +61,14 @@
     },
     {
       "id": "floor_03",
-      "label": "Etage 3 - Create",
+      "label": "Floor 3 - Create",
       "type": "floor",
       "area": "tower",
       "computerId": 11,
       "controls": [
-        { "id": "light",    "label": "Licht",     "type": "toggle", "side": "top"  },
-        { "id": "power",    "label": "Strom",     "type": "toggle", "side": "back" },
-        { "id": "machines", "label": "Maschinen", "type": "toggle", "side": "left" }
+        { "id": "light",    "label": "Light",     "type": "toggle", "side": "top"  },
+        { "id": "power",    "label": "Power",     "type": "toggle", "side": "back" },
+        { "id": "machines", "label": "Machines", "type": "toggle", "side": "left" }
       ],
       "peripherals": [
         { "side": "bottom", "pType": "stressometer", "role": "create" }
@@ -79,25 +79,25 @@
     },
     {
       "id": "floor_04",
-      "label": "Etage 4 - Leer",
+      "label": "Floor 4 - Empty",
       "type": "floor",
       "area": "tower",
       "computerId": 14,
       "controls": [
-        { "id": "light", "label": "Licht", "type": "toggle", "side": "top" },
-        { "id": "power", "label": "Strom", "type": "toggle", "side": "back" }
+        { "id": "light", "label": "Light", "type": "toggle", "side": "top" },
+        { "id": "power", "label": "Power", "type": "toggle", "side": "back" }
       ],
       "peripherals": [],
       "pinMetrics": []
     },
     {
       "id": "floor_05",
-      "label": "Etage 5 - Turbine",
+      "label": "Floor 5 - Turbine",
       "type": "floor",
       "area": "tower",
       "computerId": 17,
       "controls": [
-        { "id": "light",   "label": "Licht",   "type": "toggle", "side": "top"  },
+        { "id": "light",   "label": "Light",   "type": "toggle", "side": "top"  },
         { "id": "turbine", "label": "Turbine", "type": "toggle", "side": "back", "invert": true }
       ],
       "peripherals": [
@@ -110,7 +110,7 @@
     },
     {
       "id": "me_core",
-      "label": "ME Kern",
+      "label": "ME Core",
       "type": "me",
       "area": "me_network",
       "computerId": 15,
@@ -125,22 +125,22 @@
       "area": "village_north",
       "computerId": 20,
       "controls": [
-        { "id": "power",    "label": "Strom",  "type": "toggle", "side": "back" },
-        { "id": "machines", "label": "Ernte",  "type": "toggle", "side": "left" }
+        { "id": "power",    "label": "Power",  "type": "toggle", "side": "back" },
+        { "id": "machines", "label": "Harvest", "type": "toggle", "side": "left" }
       ],
       "peripherals": [],
       "pinMetrics": []
     },
     {
       "id": "village_smithy",
-      "label": "Schmiede",
+      "label": "Smithy",
       "type": "building",
       "area": "village_north",
       "computerId": 21,
       "controls": [
-        { "id": "light",    "label": "Licht",     "type": "toggle", "side": "top"  },
-        { "id": "power",    "label": "Strom",     "type": "toggle", "side": "back" },
-        { "id": "machines", "label": "Maschinen", "type": "toggle", "side": "left" }
+        { "id": "light",    "label": "Light",     "type": "toggle", "side": "top"  },
+        { "id": "power",    "label": "Power",     "type": "toggle", "side": "back" },
+        { "id": "machines", "label": "Machines", "type": "toggle", "side": "left" }
       ],
       "peripherals": [],
       "pinMetrics": []
