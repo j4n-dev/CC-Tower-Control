@@ -1,14 +1,14 @@
 -- server.lua
 -- Master Control Server for Tower Control System.
 -- Handles auto-discovery, node status tracking, ME polling,
--- control commands, and drives the Basalt UI.
+-- control commands, and drives the monitor UI.
 
 local protocol = require("lib/protocol")
 local metrics  = require("lib/metrics")
 
-
+-- ─────────────────────────────────────────
 -- Constants
-
+-- ─────────────────────────────────────────
 local VERSION       = "0.1.0"
 local REGISTRY_FILE = "registry.json"
 local CONFIG_FILE   = "config.json"
@@ -20,9 +20,9 @@ local STATUS = {
   OFFLINE     = "offline",
 }
 
-
+-- ─────────────────────────────────────────
 -- Config
-
+-- ─────────────────────────────────────────
 local function loadConfig()
   if not fs.exists(CONFIG_FILE) then
     return {
@@ -50,9 +50,9 @@ local function getThresholds(nodeDef)
   }
 end
 
-
+-- ─────────────────────────────────────────
 -- Registry
-
+-- ─────────────────────────────────────────
 local function loadRegistry()
   if not fs.exists(REGISTRY_FILE) then
     return { areas = {}, nodes = {}, watchItems = {} }
@@ -84,9 +84,9 @@ end
 
 local nodeIndex = buildNodeIndex(registry)
 
-
+-- ─────────────────────────────────────────
 -- Auto-Discovery
-
+-- ─────────────────────────────────────────
 local function findOrCreateNode(nodeId, computerId, regMsg)
   if nodeIndex[nodeId] then
     nodeIndex[nodeId].computerId = computerId
@@ -130,9 +130,9 @@ local function findOrCreateNode(nodeId, computerId, regMsg)
   return nodeDef
 end
 
-
+-- ─────────────────────────────────────────
 -- Runtime State
-
+-- ─────────────────────────────────────────
 local state = {}
 
 local function ensureNodeState(nodeId, computerId)
@@ -153,10 +153,10 @@ local function ensureNodeState(nodeId, computerId)
 end
 
 local function markSeen(nodeId, computerId)
-  local s        = ensureNodeState(nodeId, computerId)
-  s.lastSeen     = os.epoch("utc")
-  s.status       = STATUS.ONLINE
-  s.pingPending  = false
+  local s       = ensureNodeState(nodeId, computerId)
+  s.lastSeen    = os.epoch("utc")
+  s.status      = STATUS.ONLINE
+  s.pingPending = false
 end
 
 local function updateMetrics(nodeId, metricList)
@@ -166,9 +166,9 @@ local function updateMetrics(nodeId, metricList)
   end
 end
 
-
+-- ─────────────────────────────────────────
 -- Status Watchdog
-
+-- ─────────────────────────────────────────
 local function runWatchdog()
   local nowMs = os.epoch("utc")
 
@@ -206,9 +206,9 @@ local function runWatchdog()
   end
 end
 
-
+-- ─────────────────────────────────────────
 -- ME Bridge Polling
-
+-- ─────────────────────────────────────────
 local meBridge = peripheral.find("meBridge")
 
 local function pollME()
@@ -235,22 +235,18 @@ local function pollME()
   end
 end
 
-
+-- ─────────────────────────────────────────
 -- Control Commands
-
+-- ─────────────────────────────────────────
 local function sendControl(nodeId, capability, value)
   local s = state[nodeId]
-  if not s then
-    return false, "Node unknown"
-  end
+  if not s then return false, "Node unknown" end
 
   if s.status == STATUS.UNREACHABLE or s.status == STATUS.OFFLINE then
     return false, "Node is " .. s.status
   end
 
-  if not s.computerId then
-    return false, "No computerId for node"
-  end
+  if not s.computerId then return false, "No computerId for node" end
 
   local response = protocol.sendAndWait(
     s.computerId,
@@ -277,9 +273,9 @@ local function sendControlToArea(areaId, capability, value)
   end
 end
 
-
+-- ─────────────────────────────────────────
 -- Message Handler
-
+-- ─────────────────────────────────────────
 local function handleMessage(senderId, msg)
   if not protocol.isValid(msg) then return end
 
@@ -298,9 +294,7 @@ local function handleMessage(senderId, msg)
 
   elseif msg.action == A.REPORT then
     markSeen(msg.nodeId, senderId)
-    if msg.metrics then
-      updateMetrics(msg.nodeId, msg.metrics)
-    end
+    if msg.metrics then updateMetrics(msg.nodeId, msg.metrics) end
 
   elseif msg.action == A.PING then
     markSeen(msg.nodeId, senderId)
@@ -313,38 +307,32 @@ local function handleMessage(senderId, msg)
     end
 
   elseif msg.action == A.ACK then
-    -- ACKs from local monitor toggles carry capability + value
-    -- Use them to keep server controls state in sync
+    -- ACK from node monitor toggle – keep controls state in sync
     if msg.nodeId and msg.capability and msg.value ~= nil and msg.ok then
       local s = state[msg.nodeId]
-      if s then
-        s.controls[msg.capability] = msg.value
-      end
+      if s then s.controls[msg.capability] = msg.value end
     end
   end
 end
 
-
+-- ─────────────────────────────────────────
 -- Public API (used by ui.lua)
-
+-- ─────────────────────────────────────────
 local server = {}
 
-function server.getRegistry()        return registry   end
-function server.getNodeIndex()       return nodeIndex  end
-function server.getState()           return state      end
-function server.getStatus()          return STATUS     end
-function server.getConfig()          return config     end
-function server.getNodeState(nodeId) return state[nodeId] end
+function server.getRegistry()        return registry        end
+function server.getNodeIndex()       return nodeIndex       end
+function server.getState()           return state           end
+function server.getStatus()          return STATUS          end
+function server.getConfig()          return config          end
+function server.getNodeState(nodeId) return state[nodeId]   end
 
 function server.getAreaNodes(areaId)
   for _, area in ipairs(registry.areas) do
     if area.id == areaId then
       local nodes = {}
       for _, nodeId in ipairs(area.nodes) do
-        nodes[#nodes + 1] = {
-          def   = nodeIndex[nodeId],
-          state = state[nodeId],
-        }
+        nodes[#nodes + 1] = { def = nodeIndex[nodeId], state = state[nodeId] }
       end
       return nodes
     end
@@ -355,23 +343,21 @@ end
 server.sendControl       = sendControl
 server.sendControlToArea = sendControlToArea
 
-
+-- ─────────────────────────────────────────
 -- Main
-
+-- ─────────────────────────────────────────
 print("[server] Tower Control Server v" .. VERSION)
 protocol.open()
 
 local timers = {
-  { name = "watchdog", every = 1, last = 0, fn = runWatchdog },
-  { name = "mePoll",   every = 5, last = 0, fn = pollME      },
+  { every = 1, last = 0, fn = runWatchdog },
+  { every = 5, last = 0, fn = pollME      },
 }
 
 local function networkLoop()
   while true do
     local senderId, msg = protocol.receive(1)
-    if senderId and msg then
-      handleMessage(senderId, msg)
-    end
+    if senderId and msg then handleMessage(senderId, msg) end
 
     local now = os.clock()
     for _, t in ipairs(timers) do
@@ -384,16 +370,15 @@ local function networkLoop()
 end
 
 local function uiLoop()
-  local ok, ui = pcall(require, "lib/ui")
+  local ok, uiMod = pcall(require, "lib/ui")
   if not ok then
-    print("[server] UI not available: " .. tostring(ui))
+    print("[server] UI load failed: " .. tostring(uiMod))
     print("[server] Running headless.")
     while true do os.sleep(60) end
   end
-  ui.run(server)
+  uiMod.run(server)
 end
 
--- Run network loop and UI in parallel
 parallel.waitForAny(networkLoop, uiLoop)
 
 return server

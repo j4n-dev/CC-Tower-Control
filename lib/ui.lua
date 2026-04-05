@@ -1,34 +1,40 @@
 -- lib/ui.lua
--- Basalt 1 UI for Tower Control System.
--- Basalt 1 API:
---   basalt.createFrame()          main frame (terminal)
---   basalt.addMonitor("side")     monitor frame
---   basalt.autoUpdate()           event loop (blocking)
---   frame:addLabel/Button/etc.
---   element:setForegroundColor()  / :setBackgroundColor()
---   element:setTextColor()        (alias)
+-- Tower Control UI using native CC monitor API only.
+-- No external frameworks.
+--
+-- Monitor API used:
+--   mon.setTextScale(scale)
+--   mon.getSize()             -> w, h
+--   mon.clear()
+--   mon.setCursorPos(x, y)
+--   mon.setTextColor(color)
+--   mon.setBackgroundColor(color)
+--   mon.write(text)
+-- Input via os.pullEvent("monitor_touch") -> side, x, y
 
 local ui = {}
 
 -- ─────────────────────────────────────────
--- Constants
+-- Colors
 -- ─────────────────────────────────────────
-local COLORS = {
+local C = {
   bg          = colors.black,
-  bgPanel     = colors.gray,
-  bgTab       = colors.gray,
-  bgTabActive = colors.black,
-  divider     = colors.lightGray,
   text        = colors.white,
-  textDim     = colors.lightGray,
-  textLabel   = colors.white,
+  dim         = colors.lightGray,
+  divider     = colors.lightGray,
+  panel       = colors.gray,
+
+  tabBg       = colors.gray,
+  tabActive   = colors.black,
+  tabText     = colors.white,
+  tabDim      = colors.lightGray,
 
   online      = colors.green,
   degraded    = colors.yellow,
   unreachable = colors.orange,
   offline     = colors.red,
 
-  barNormal   = colors.lime,
+  barFill     = colors.lime,
   barWarn     = colors.yellow,
   barCrit     = colors.red,
   barBg       = colors.gray,
@@ -37,94 +43,158 @@ local COLORS = {
   sliderOff   = colors.red,
   sliderDis   = colors.gray,
 
-  btnBack     = colors.gray,
   btnAllOn    = colors.green,
   btnAllOff   = colors.red,
+  btnBack     = colors.gray,
+  btnTrigger  = colors.blue,
+  btnTriggerR = colors.red,
 
   pinnedHdr   = colors.cyan,
   rateIn      = colors.lime,
   rateOut     = colors.red,
-  rateNet     = colors.white,
-
   warn        = colors.yellow,
-  crit        = colors.red,
 }
 
 local STATUS_ICON = {
   online      = "\x07",
-  degraded    = "\x14",
-  unreachable = "\x09",
-  offline     = "\xd7",
+  degraded    = "~",
+  unreachable = "o",
+  offline     = "x",
 }
 
 local STATUS_COLOR = {
-  online      = COLORS.online,
-  degraded    = COLORS.degraded,
-  unreachable = COLORS.unreachable,
-  offline     = COLORS.offline,
+  online      = C.online,
+  degraded    = C.degraded,
+  unreachable = C.unreachable,
+  offline     = C.offline,
 }
 
 -- ─────────────────────────────────────────
--- Helpers
+-- Draw helpers
 -- ─────────────────────────────────────────
-local function statusIcon(status)
-  return STATUS_ICON[status] or "?"
+local mon, W, H
+
+local function put(x, y, text, fg, bg)
+  if y < 1 or y > H or x > W then return end
+  if x < 1 then
+    text = text:sub(1 - x + 1)
+    x = 1
+  end
+  local maxLen = W - x + 1
+  if maxLen <= 0 or #text == 0 then return end
+  if #text > maxLen then text = text:sub(1, maxLen) end
+  mon.setCursorPos(x, y)
+  mon.setTextColor(fg or C.text)
+  mon.setBackgroundColor(bg or C.bg)
+  mon.write(text)
 end
 
-local function statusColor(status)
-  return STATUS_COLOR[status] or COLORS.textDim
+local function fillLine(y, fg, bg)
+  put(1, y, string.rep(" ", W), fg, bg)
+end
+
+local function divider(y, label)
+  if label and label ~= "" then
+    local left  = "\x8c\x8c "
+    local right = " " .. string.rep("\x8c", math.max(1, W - #label - #left - 1))
+    put(1, y, left .. label .. right, C.divider, C.bg)
+  else
+    put(1, y, string.rep("\x8c", W), C.divider, C.bg)
+  end
+end
+
+local function formatNum(n)
+  if n >= 1000000 then return string.format("%.1fM", n / 1000000)
+  elseif n >= 1000 then return string.format("%.1fk", n / 1000)
+  else return tostring(math.floor(n)) end
 end
 
 local function barColor(m)
   local ms = require("lib/metrics")
   local st = ms.status(m)
-  if st == "crit" then return COLORS.barCrit end
-  if st == "warn" then return COLORS.barWarn end
-  return COLORS.barNormal
+  if st == "crit" then return C.barCrit end
+  if st == "warn" then return C.barWarn end
+  return C.barFill
 end
 
-local function warnIcon(m)
+local function warnSuffix(m)
   local ms = require("lib/metrics")
   local st = ms.status(m)
   if st == "crit" or st == "warn" then return " !" end
   return ""
 end
 
-local function formatNum(n)
-  if n >= 1000000 then
-    return string.format("%.1fM", n / 1000000)
-  elseif n >= 1000 then
-    return string.format("%.1fk", n / 1000)
-  else
-    return tostring(math.floor(n))
-  end
-end
-
-local function formatMetricValue(m)
+local function metricValueStr(m)
   local MT = require("lib/metrics").TYPE
   if m.type == MT.BAR then
     local pct = m.max > 0 and math.floor((m.value / m.max) * 100) or 0
-    return formatNum(m.value) .. " / " .. formatNum(m.max) .. " " .. (m.unit or "") ..
-           "   " .. pct .. "%" .. warnIcon(m)
+    return formatNum(m.value) .. "/" .. formatNum(m.max) .. " " .. (m.unit or "") .. " " .. pct .. "%" .. warnSuffix(m)
   elseif m.type == MT.RATE then
-    local arrow = m.direction == "in"  and "\x18 " or
-                  m.direction == "out" and "\x19 " or "~ "
+    local arrow = m.direction == "in" and "+" or m.direction == "out" and "-" or "~"
     return arrow .. formatNum(m.value) .. " " .. (m.unit or "")
   elseif m.type == MT.VALUE then
-    return formatNum(m.value) .. " " .. (m.unit or "") .. warnIcon(m)
+    return formatNum(m.value) .. " " .. (m.unit or "") .. warnSuffix(m)
   elseif m.type == MT.TOGGLE then
     return m.value and "ON" or "OFF"
   end
   return tostring(m.value)
 end
 
+-- Draw one metric block. Returns next y.
+local function drawMetric(y, m, sourceLabel)
+  if y > H then return y end
+  local MT  = require("lib/metrics").TYPE
+  local val = metricValueStr(m)
+
+  local label = m.label
+  if sourceLabel then label = label .. " [" .. sourceLabel .. "]" end
+
+  -- Label left, value right
+  put(2, y, label, C.text, C.bg)
+  put(W - #val, y, val,
+    (warnSuffix(m) ~= "") and C.warn or C.dim, C.bg)
+  y = y + 1
+
+  if m.type == MT.BAR and m.max and m.max > 0 then
+    local bw     = W - 2
+    local filled = math.max(0, math.min(bw, math.floor((m.value / m.max) * bw)))
+    local bar    = string.rep("\x8f", filled) .. string.rep("\x8c", bw - filled)
+    put(2, y, bar, barColor(m), C.barBg)
+    y = y + 1
+  elseif m.type == MT.RATE then
+    local col = m.direction == "in" and C.rateIn or
+                m.direction == "out" and C.rateOut or C.dim
+    put(W - #val, y - 1, val, col, C.bg)
+  end
+
+  return y + 1  -- blank line between metrics
+end
+
 -- ─────────────────────────────────────────
--- Pinned Metrics
+-- Button registry
+-- Clickable regions stored per render cycle.
+-- ─────────────────────────────────────────
+local buttons = {}  -- { x1, y1, x2, y2, action }
+
+local function addButton(x1, y1, x2, y2, action)
+  buttons[#buttons + 1] = { x1=x1, y1=y1, x2=x2, y2=y2, action=action }
+end
+
+local function hitTest(mx, my)
+  for _, b in ipairs(buttons) do
+    if mx >= b.x1 and mx <= b.x2 and my >= b.y1 and my <= b.y2 then
+      return b.action
+    end
+  end
+  return nil
+end
+
+-- ─────────────────────────────────────────
+-- Pinned metrics helpers
 -- ─────────────────────────────────────────
 local function getPinnedFor(targetId, server)
-  local registry = server.getRegistry()
-  local result   = {}
-  for _, node in ipairs(registry.nodes) do
+  local result = {}
+  for _, node in ipairs(server.getRegistry().nodes) do
     for _, pin in ipairs(node.pinMetrics or {}) do
       if pin.to == targetId then
         local ns = server.getNodeState(node.id)
@@ -141,8 +211,7 @@ local function getPinnedFor(targetId, server)
 end
 
 local function getPinnedTargets(nodeDef)
-  local targets = {}
-  local seen    = {}
+  local targets, seen = {}, {}
   for _, pin in ipairs(nodeDef.pinMetrics or {}) do
     if not seen[pin.to] then
       targets[#targets + 1] = pin.to
@@ -153,145 +222,28 @@ local function getPinnedTargets(nodeDef)
 end
 
 -- ─────────────────────────────────────────
--- Render Helpers
--- All use Basalt 1 API: setForegroundColor / setBackgroundColor
+-- Screen renderers
+-- Each returns the next unused y row.
 -- ─────────────────────────────────────────
-local function addDivider(frame, y, label)
-  local w, _ = frame:getSize()
-  local line
-  if label and label ~= "" then
-    line = "\x8c\x8c " .. label .. " " .. string.rep("\x8c", math.max(0, w - #label - 5))
-  else
-    line = string.rep("\x8c", w)
-  end
-  frame:addLabel()
-    :setPosition(1, y)
-    :setText(line)
-    :setForegroundColor(COLORS.divider)
-  return y + 1
-end
 
-local function addMetricBar(frame, y, m, sourceLabel)
-  local w, _ = frame:getSize()
-  local MT   = require("lib/metrics").TYPE
-
-  local labelText = m.label
-  if sourceLabel then
-    labelText = labelText .. "  [" .. sourceLabel .. "]"
-  end
-  local valText = formatMetricValue(m)
-
-  frame:addLabel()
-    :setPosition(2, y)
-    :setText(labelText)
-    :setForegroundColor(COLORS.textLabel)
-
-  frame:addLabel()
-    :setPosition(w - #valText, y)
-    :setText(valText)
-    :setForegroundColor(warnIcon(m) ~= "" and COLORS.warn or COLORS.textDim)
-
-  y = y + 1
-
-  if m.type == MT.BAR and m.max and m.max > 0 then
-    local barW   = w - 2
-    local filled = math.floor((m.value / m.max) * barW)
-    filled       = math.max(0, math.min(barW, filled))
-    local bar    = string.rep("\x8f", filled) .. string.rep("\x8c", barW - filled)
-
-    frame:addLabel()
-      :setPosition(2, y)
-      :setText(bar)
-      :setForegroundColor(barColor(m))
-      :setBackgroundColor(COLORS.barBg)
-
-    y = y + 1
-
-  elseif m.type == MT.RATE then
-    local col = m.direction == "in"  and COLORS.rateIn  or
-                m.direction == "out" and COLORS.rateOut or
-                COLORS.rateNet
-    frame:addLabel()
-      :setPosition(w - #valText, y - 1)
-      :setText(valText)
-      :setForegroundColor(col)
-  end
-
-  return y + 1
-end
-
-local function addSlider(frame, y, control, currentValue, disabled, onToggle)
-  local label = control.label or control.id
-  local isOn  = currentValue
-
-  frame:addLabel()
-    :setPosition(2, y)
-    :setText(label)
-    :setForegroundColor(disabled and COLORS.textDim or COLORS.textLabel)
-
-  if disabled then
-    frame:addLabel()
-      :setPosition(20, y)
-      :setText("[ .......... ]")
-      :setForegroundColor(COLORS.sliderDis)
-  else
-    local sliderText, sliderCol
-    if isOn then
-      sliderText = "[ \x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x95 ON  ]"
-      sliderCol  = COLORS.sliderOn
-    else
-      sliderText = "[ OFF \x95\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c ]"
-      sliderCol  = COLORS.sliderOff
-    end
-
-    local btn = frame:addButton()
-      :setPosition(18, y)
-      :setSize(#sliderText, 1)
-      :setText(sliderText)
-      :setForegroundColor(sliderCol)
-      :setBackgroundColor(COLORS.bg)
-
-    btn:onClick(function()
-      if onToggle then onToggle(control.id, not isOn) end
-    end)
-  end
-
-  return y + 2
-end
-
--- ─────────────────────────────────────────
--- Screen Builders
--- ─────────────────────────────────────────
-local function buildAreaScreen(frame, area, server, onNodeSelect)
-  local w, _  = frame:getSize()
-  local y     = 1
-  local state = server.getState()
-  local idx   = server.getNodeIndex()
-
-  frame:addButton()
-    :setPosition(w - 16, y)
-    :setSize(8, 1)
-    :setText(" All ON")
-    :setForegroundColor(colors.white)
-    :setBackgroundColor(COLORS.btnAllOn)
-    :onClick(function()
-      server.sendControlToArea(area.id, "power", true)
-      server.sendControlToArea(area.id, "light", true)
-    end)
-
-  frame:addButton()
-    :setPosition(w - 7, y)
-    :setSize(8, 1)
-    :setText("All OFF")
-    :setForegroundColor(colors.white)
-    :setBackgroundColor(COLORS.btnAllOff)
-    :onClick(function()
-      server.sendControlToArea(area.id, "power", false)
-      server.sendControlToArea(area.id, "light", false)
-    end)
-
+local function drawAreaScreen(y, area, server, state, idx)
+  -- All ON / All OFF buttons
+  local onLabel  = " All ON "
+  local offLabel = " All OFF"
+  local onX      = W - #onLabel - #offLabel
+  put(onX, y, onLabel, colors.white, C.btnAllOn)
+  addButton(onX, y, onX + #onLabel - 1, y, function()
+    server.sendControlToArea(area.id, "power", true)
+    server.sendControlToArea(area.id, "light", true)
+  end)
+  put(onX + #onLabel, y, offLabel, colors.white, C.btnAllOff)
+  addButton(onX + #onLabel, y, W, y, function()
+    server.sendControlToArea(area.id, "power", false)
+    server.sendControlToArea(area.id, "light", false)
+  end)
   y = y + 2
-  y = addDivider(frame, y, "Nodes")
+
+  divider(y, "Nodes")
   y = y + 1
 
   for _, nodeId in ipairs(area.nodes or {}) do
@@ -299,31 +251,18 @@ local function buildAreaScreen(frame, area, server, onNodeSelect)
     local ns      = state[nodeId]
     if nodeDef then
       local status = (ns and ns.status) or "offline"
+      local icon   = STATUS_ICON[status] or "?"
+      local label  = nodeDef.label or nodeId
 
-      frame:addLabel()
-        :setPosition(2, y)
-        :setText(statusIcon(status))
-        :setForegroundColor(statusColor(status))
-
-      local label = nodeDef.label or nodeId
-      local btn = frame:addButton()
-        :setPosition(4, y)
-        :setSize(w - 6, 1)
-        :setText(label .. string.rep(" ", math.max(1, w - 6 - #label - 1)) .. ">")
-        :setForegroundColor(COLORS.text)
-        :setBackgroundColor(COLORS.bg)
+      put(2, y, icon, STATUS_COLOR[status] or C.dim, C.bg)
+      put(4, y, label, C.text, C.bg)
+      put(W, y, ">", C.dim, C.bg)
 
       local capturedId = nodeId
-      btn:onClick(function()
-        if onNodeSelect then onNodeSelect(capturedId) end
-      end)
+      addButton(1, y, W, y, function() return "node:" .. capturedId end)
 
       y = y + 1
-
-      frame:addLabel()
-        :setPosition(2, y)
-        :setText(string.rep("\x8c", w - 3))
-        :setForegroundColor(COLORS.bgPanel)
+      put(2, y, string.rep("\x8c", W - 2), C.panel, C.bg)
       y = y + 1
     end
   end
@@ -331,97 +270,96 @@ local function buildAreaScreen(frame, area, server, onNodeSelect)
   local pinned = getPinnedFor(area.id, server)
   if #pinned > 0 then
     y = y + 1
-    y = addDivider(frame, y, "Pinned")
+    divider(y, "Pinned")
     y = y + 1
     for _, p in ipairs(pinned) do
-      y = addMetricBar(frame, y, p.metric, p.sourceLabel)
+      y = drawMetric(y, p.metric, p.sourceLabel)
     end
   end
+
+  return y
 end
 
-local function buildDetailScreen(frame, nodeId, server, onBack)
-  local w, _    = frame:getSize()
-  local y       = 1
-  local idx     = server.getNodeIndex()
-  local state   = server.getState()
-  local nodeDef = idx[nodeId]
-  local ns      = state[nodeId]
+local function drawDetailScreen(y, nodeId, server, state, idx)
+  local nodeDef  = idx[nodeId]
+  local ns       = state[nodeId]
 
   if not nodeDef then
-    frame:addLabel():setPosition(2, 2):setText("Node not found: " .. nodeId)
-    return
+    put(2, y, "Node not found: " .. nodeId, C.warn, C.bg)
+    return y + 1
   end
 
   local status   = (ns and ns.status) or "offline"
   local disabled = status == "unreachable" or status == "offline"
 
-  frame:addButton()
-    :setPosition(1, y)
-    :setSize(10, 1)
-    :setText("< Back")
-    :setForegroundColor(COLORS.text)
-    :setBackgroundColor(COLORS.btnBack)
-    :onClick(function()
-      if onBack then onBack() end
-    end)
-
-  frame:addLabel()
-    :setPosition(12, y)
-    :setText(statusIcon(status))
-    :setForegroundColor(statusColor(status))
-
-  frame:addLabel()
-    :setPosition(14, y)
-    :setText(nodeDef.label or nodeId)
-    :setForegroundColor(COLORS.text)
-
+  -- Back button
+  local backLabel = "< Back"
+  put(1, y, " " .. backLabel .. " ", C.text, C.btnBack)
+  addButton(1, y, #backLabel + 2, y, function() return "back" end)
+  put(#backLabel + 4, y, STATUS_ICON[status] or "?", STATUS_COLOR[status] or C.dim, C.bg)
+  put(#backLabel + 6, y, nodeDef.label or nodeId, C.text, C.bg)
   y = y + 2
 
+  -- Controls
   local controls = nodeDef.controls or {}
   if #controls > 0 then
-    y = addDivider(frame, y, "Controls")
+    divider(y, "Controls")
     y = y + 1
 
     for _, control in ipairs(controls) do
-      if control.type == "toggle" then
-        local currentVal = ns and ns.controls and ns.controls[control.id] or false
-        y = addSlider(frame, y, control, currentVal, disabled, function(capId, newVal)
-          local ok, err = server.sendControl(nodeId, capId, newVal)
-          if not ok then
-            print("[ui] Control failed: " .. tostring(err))
-          end
-        end)
+      put(2, y, control.label or control.id,
+        disabled and C.sliderDis or C.text, C.bg)
 
-      elseif control.type == "trigger" then
-        frame:addLabel()
-          :setPosition(2, y)
-          :setText(control.label or control.id)
-          :setForegroundColor(disabled and COLORS.textDim or COLORS.textLabel)
+      if control.type == "toggle" then
+        local val = ns and ns.controls and ns.controls[control.id] or false
+        local sliderText, sliderFg
+
+        if disabled then
+          sliderText = "[ ............ ]"
+          sliderFg   = C.sliderDis
+        elseif val then
+          sliderText = "[ \x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x95 ON  ]"
+          sliderFg   = C.sliderOn
+        else
+          sliderText = "[ OFF \x95\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c ]"
+          sliderFg   = C.sliderOff
+        end
+
+        local sx = W - #sliderText
+        put(sx, y, sliderText, sliderFg, C.bg)
 
         if not disabled then
-          local col = control.color == "red" and COLORS.crit or colors.blue
-          local btn = frame:addButton()
-            :setPosition(18, y)
-            :setSize(12, 1)
-            :setText("[ TRIGGER ]")
-            :setForegroundColor(colors.white)
-            :setBackgroundColor(col)
+          local capturedControl = control
+          local capturedVal     = val
+          addButton(sx, y, W, y, function()
+            local ok, err = server.sendControl(nodeId, capturedControl.id, not capturedVal)
+            if not ok then print("[ui] Control error: " .. tostring(err)) end
+            return "refresh"
+          end)
+        end
 
-          local capturedId = control.id
-          btn:onClick(function()
-            server.sendControl(nodeId, capturedId, true)
+      elseif control.type == "trigger" then
+        if not disabled then
+          local trigLabel = "[ TRIGGER ]"
+          local trigBg    = control.color == "red" and C.btnTriggerR or C.btnTrigger
+          local tx        = W - #trigLabel
+          put(tx, y, trigLabel, colors.white, trigBg)
+
+          local capturedControl = control
+          addButton(tx, y, W, y, function()
+            server.sendControl(nodeId, capturedControl.id, true)
+            return "refresh"
           end)
         else
-          frame:addLabel()
-            :setPosition(18, y)
-            :setText("[ ........ ]")
-            :setForegroundColor(COLORS.sliderDis)
+          put(W - 11, y, "[ ......... ]", C.sliderDis, C.bg)
         end
-        y = y + 2
       end
+
+      y = y + 2
     end
   end
 
+  -- Metrics
   local metricList = {}
   if ns and ns.metrics then
     for _, m in pairs(ns.metrics) do
@@ -433,653 +371,471 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
 
   if #metricList > 0 then
     y = y + 1
-    y = addDivider(frame, y, "Metrics")
+    divider(y, "Metrics")
     y = y + 1
     for _, m in ipairs(metricList) do
-      y = addMetricBar(frame, y, m, nil)
+      y = drawMetric(y, m, nil)
     end
   end
 
+  -- Pinned in
   local targets = getPinnedTargets(nodeDef)
   if #targets > 0 then
     y = y + 1
-    y = addDivider(frame, y, "Pinned in")
+    divider(y, "Pinned in")
     y = y + 1
-
     local reg = server.getRegistry()
     for _, targetId in ipairs(targets) do
       local targetLabel = targetId
       for _, area in ipairs(reg.areas) do
         if area.id == targetId then targetLabel = area.label or targetId; break end
       end
-      for _, node in ipairs(reg.nodes) do
-        if node.id == targetId then targetLabel = node.label or targetId; break end
-      end
-
       local pinnedHere = {}
       for _, pin in ipairs(nodeDef.pinMetrics or {}) do
-        if pin.to == targetId then
-          pinnedHere[#pinnedHere + 1] = pin.metricId
-        end
+        if pin.to == targetId then pinnedHere[#pinnedHere + 1] = pin.metricId end
       end
-
-      frame:addLabel()
-        :setPosition(2, y)
-        :setText(targetLabel .. ": " .. table.concat(pinnedHere, ", "))
-        :setForegroundColor(COLORS.pinnedHdr)
-
+      put(2, y, targetLabel .. ": " .. table.concat(pinnedHere, ", "), C.pinnedHdr, C.bg)
       y = y + 1
     end
   end
+
+  return y
 end
 
-local function buildMEScreen(frame, server)
-  local w, _ = frame:getSize()
-  local y    = 1
-  local ns   = server.getNodeState("me_network") or { metrics = {}, status = "offline" }
+local function drawMEScreen(y, server)
+  local ns     = server.getNodeState("me_network") or { metrics = {}, status = "offline" }
   local status = ns.status or "offline"
 
-  frame:addLabel()
-    :setPosition(2, y)
-    :setText("ME Network")
-    :setForegroundColor(COLORS.text)
-
-  frame:addLabel()
-    :setPosition(w - 3, y)
-    :setText(statusIcon(status))
-    :setForegroundColor(statusColor(status))
-
+  put(2, y, "ME Network", C.text, C.bg)
+  put(W - 1, y, STATUS_ICON[status] or "?", STATUS_COLOR[status] or C.dim, C.bg)
   y = y + 2
 
   local meOrder = { "me_energy", "me_usage", "me_items", "me_fluids" }
   for _, id in ipairs(meOrder) do
     local m = ns.metrics and ns.metrics[id]
-    if m then y = addMetricBar(frame, y, m, nil) end
+    if m then y = drawMetric(y, m, nil) end
   end
 
   local watchItems = {}
   if ns.metrics then
     for id, m in pairs(ns.metrics) do
-      if id:sub(1, 5) == "item_" then
-        watchItems[#watchItems + 1] = m
-      end
+      if id:sub(1, 5) == "item_" then watchItems[#watchItems + 1] = m end
     end
   end
 
   if #watchItems > 0 then
     y = y + 1
-    y = addDivider(frame, y, "Watch Items")
+    divider(y, "Watch Items")
     y = y + 1
-
     table.sort(watchItems, function(a, b) return a.label < b.label end)
-
     for _, m in ipairs(watchItems) do
-      local val    = formatNum(m.value)
-      local warn   = warnIcon(m)
-      local col    = warn ~= "" and COLORS.warn or COLORS.textDim
-      local barW   = math.floor(w * 0.5)
-      local thresh = m.warnAt or 0
-      local ratio  = thresh > 0 and math.min(1, m.value / thresh) or 0
-      local filled = math.floor(ratio * barW)
-      local bar    = string.rep("\x8f", filled) .. string.rep("\x8c", barW - filled)
-
-      frame:addLabel()
-        :setPosition(2, y)
-        :setText(m.label)
-        :setForegroundColor(COLORS.textLabel)
-
-      frame:addLabel()
-        :setPosition(2 + barW + 2, y)
-        :setText(val .. warn)
-        :setForegroundColor(col)
-
-      y = y + 1
-
-      frame:addLabel()
-        :setPosition(2, y)
-        :setText(bar)
-        :setForegroundColor(warn ~= "" and COLORS.barWarn or COLORS.barNormal)
-        :setBackgroundColor(COLORS.barBg)
-
-      y = y + 2
+      y = drawMetric(y, m, nil)
     end
   end
 
   local pinned = getPinnedFor("me_network", server)
   if #pinned > 0 then
     y = y + 1
-    y = addDivider(frame, y, "Pinned from nodes")
+    divider(y, "Pinned from nodes")
     y = y + 1
     for _, p in ipairs(pinned) do
-      y = addMetricBar(frame, y, p.metric, p.sourceLabel)
+      y = drawMetric(y, p.metric, p.sourceLabel)
     end
+  end
+
+  return y
+end
+
+-- ─────────────────────────────────────────
+-- Main render
+-- ─────────────────────────────────────────
+local function render(server, areas, activeArea, activeNode, scrollY)
+  mon.setBackgroundColor(C.bg)
+  mon.clear()
+  buttons = {}
+
+  -- Tab bar (row 1)
+  fillLine(1, C.tabDim, C.tabBg)
+  local tx = 1
+  for _, area in ipairs(areas) do
+    local label    = " " .. (area.label or area.id) .. " "
+    local isActive = area.id == activeArea
+    put(tx, 1, label,
+      isActive and C.tabText or C.tabDim,
+      isActive and C.tabActive or C.tabBg)
+    local capturedId = area.id
+    addButton(tx, 1, tx + #label - 1, 1, function() return "tab:" .. capturedId end)
+    tx = tx + #label + 1
+  end
+
+  -- Divider row 2
+  put(1, 2, string.rep("\x8c", W), C.divider, C.bg)
+
+  -- Content starts at row 3, offset by scroll
+  local contentStart = 3
+  local state        = server.getState()
+  local idx          = server.getNodeIndex()
+
+  -- We render to a virtual surface by offsetting y
+  local function vy(y) return y - scrollY + contentStart - 1 end
+
+  -- Override put to apply scroll offset
+  local origPut = put
+  local function sput(x, y, text, fg, bg)
+    origPut(x, vy(y), text, fg, bg)
+  end
+  local function sdivider(y, label)
+    local sy = vy(y)
+    if sy < contentStart or sy > H then return end
+    divider(sy, label)
+  end
+  local function sdrawMetric(y, m, sourceLabel)
+    -- Adjust y for scroll, skip if off screen
+    local MT = require("lib/metrics").TYPE
+    local lines = (m.type == MT.BAR and m.max and m.max > 0) and 3 or 2
+    if vy(y + lines - 1) < contentStart then return y + lines end
+    if vy(y) > H then return y + lines end
+
+    local val   = metricValueStr(m)
+    local label = m.label
+    if sourceLabel then label = label .. " [" .. sourceLabel .. "]" end
+
+    local sy = vy(y)
+    if sy >= contentStart and sy <= H then
+      origPut(2, sy, label, C.text, C.bg)
+      origPut(W - #val, sy, val,
+        (warnSuffix(m) ~= "") and C.warn or C.dim, C.bg)
+    end
+
+    if m.type == MT.BAR and m.max and m.max > 0 then
+      local bw     = W - 2
+      local filled = math.max(0, math.min(bw, math.floor((m.value / m.max) * bw)))
+      local bar    = string.rep("\x8f", filled) .. string.rep("\x8c", bw - filled)
+      local sby    = vy(y + 1)
+      if sby >= contentStart and sby <= H then
+        origPut(2, sby, bar, barColor(m), C.barBg)
+      end
+      return y + 3
+    elseif m.type == MT.RATE then
+      local col = m.direction == "in" and C.rateIn or
+                  m.direction == "out" and C.rateOut or C.dim
+      local sy2 = vy(y)
+      if sy2 >= contentStart and sy2 <= H then
+        origPut(W - #val, sy2, val, col, C.bg)
+      end
+    end
+    return y + 2
+  end
+
+  -- Scroll-aware button registration
+  local function saddButton(x1, y1, x2, y2, action)
+    addButton(x1, vy(y1), x2, vy(y2), action)
+  end
+
+  -- Render content
+  local y = 1  -- virtual y (before scroll)
+
+  if activeArea == "me_network" then
+    local ns     = server.getNodeState("me_network") or { metrics = {}, status = "offline" }
+    local status = ns.status or "offline"
+
+    do local sy = vy(y); if sy >= contentStart and sy <= H then
+      origPut(2, sy, "ME Network", C.text, C.bg)
+      origPut(W - 1, sy, STATUS_ICON[status] or "?", STATUS_COLOR[status] or C.dim, C.bg)
+    end end
+    y = y + 2
+
+    for _, id in ipairs({ "me_energy", "me_usage", "me_items", "me_fluids" }) do
+      local m = ns.metrics and ns.metrics[id]
+      if m then y = sdrawMetric(y, m, nil) end
+    end
+
+    local watchItems = {}
+    if ns.metrics then
+      for id, m in pairs(ns.metrics) do
+        if id:sub(1, 5) == "item_" then watchItems[#watchItems + 1] = m end
+      end
+    end
+    if #watchItems > 0 then
+      y = y + 1
+      do local sy = vy(y); if sy >= contentStart and sy <= H then sdivider(y, "Watch Items") end end
+      y = y + 1
+      table.sort(watchItems, function(a, b) return a.label < b.label end)
+      for _, m in ipairs(watchItems) do y = sdrawMetric(y, m, nil) end
+    end
+
+    local pinned = getPinnedFor("me_network", server)
+    if #pinned > 0 then
+      y = y + 1
+      do local sy = vy(y); if sy >= contentStart and sy <= H then sdivider(y, "Pinned from nodes") end end
+      y = y + 1
+      for _, p in ipairs(pinned) do y = sdrawMetric(y, p.metric, p.sourceLabel) end
+    end
+
+  elseif activeNode then
+    local nodeDef  = idx[activeNode]
+    local ns       = state[activeNode]
+
+    if not nodeDef then
+      do local sy = vy(y); if sy >= contentStart and sy <= H then
+        origPut(2, sy, "Node not found: " .. activeNode, C.warn, C.bg)
+      end end
+      return y + 1
+    end
+
+    local status   = (ns and ns.status) or "offline"
+    local disabled = status == "unreachable" or status == "offline"
+
+    -- Back button
+    local backLabel = " < Back "
+    do local sy = vy(y); if sy >= contentStart and sy <= H then
+      origPut(1, sy, backLabel, C.text, C.btnBack)
+      origPut(#backLabel + 2, sy, STATUS_ICON[status] or "?", STATUS_COLOR[status] or C.dim, C.bg)
+      origPut(#backLabel + 4, sy, nodeDef.label or activeNode, C.text, C.bg)
+    end end
+    saddButton(1, y, #backLabel, y, function() return "back" end)
+    y = y + 2
+
+    local controls = nodeDef.controls or {}
+    if #controls > 0 then
+      do local sy = vy(y); if sy >= contentStart and sy <= H then sdivider(y, "Controls") end end
+      y = y + 1
+
+      for _, control in ipairs(controls) do
+        do local sy = vy(y); if sy >= contentStart and sy <= H then
+          origPut(2, sy, control.label or control.id,
+            disabled and C.sliderDis or C.text, C.bg)
+
+          if control.type == "toggle" then
+            local val = ns and ns.controls and ns.controls[control.id] or false
+            local sliderText, sliderFg
+            if disabled then
+              sliderText = "[ ............ ]"; sliderFg = C.sliderDis
+            elseif val then
+              sliderText = "[ \x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x95 ON  ]"; sliderFg = C.sliderOn
+            else
+              sliderText = "[ OFF \x95\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c ]"; sliderFg = C.sliderOff
+            end
+            local sx = W - #sliderText
+            origPut(sx, sy, sliderText, sliderFg, C.bg)
+            if not disabled then
+              local cc, cv = control, val
+              saddButton(sx, y, W, y, function()
+                local ok, err = server.sendControl(activeNode, cc.id, not cv)
+                if not ok then print("[ui] " .. tostring(err)) end
+                return "refresh"
+              end)
+            end
+
+          elseif control.type == "trigger" then
+            if not disabled then
+              local trigLabel = "[ TRIGGER ]"
+              local trigBg    = control.color == "red" and C.btnTriggerR or C.btnTrigger
+              local tx2       = W - #trigLabel
+              origPut(tx2, sy, trigLabel, colors.white, trigBg)
+              local cc = control
+              saddButton(tx2, y, W, y, function()
+                server.sendControl(activeNode, cc.id, true)
+                return "refresh"
+              end)
+            else
+              origPut(W - 11, sy, "[ ......... ]", C.sliderDis, C.bg)
+            end
+          end
+        end end
+        y = y + 2
+      end
+    end
+
+    local metricList = {}
+    if ns and ns.metrics then
+      for _, m in pairs(ns.metrics) do
+        if m.type ~= require("lib/metrics").TYPE.TOGGLE then
+          metricList[#metricList + 1] = m
+        end
+      end
+    end
+    if #metricList > 0 then
+      y = y + 1
+      do local sy = vy(y); if sy >= contentStart and sy <= H then sdivider(y, "Metrics") end end
+      y = y + 1
+      for _, m in ipairs(metricList) do y = sdrawMetric(y, m, nil) end
+    end
+
+    local targets = getPinnedTargets(nodeDef)
+    if #targets > 0 then
+      y = y + 1
+      do local sy = vy(y); if sy >= contentStart and sy <= H then sdivider(y, "Pinned in") end end
+      y = y + 1
+      local reg = server.getRegistry()
+      for _, targetId in ipairs(targets) do
+        local targetLabel = targetId
+        for _, area in ipairs(reg.areas) do
+          if area.id == targetId then targetLabel = area.label or targetId; break end
+        end
+        local pinnedHere = {}
+        for _, pin in ipairs(nodeDef.pinMetrics or {}) do
+          if pin.to == targetId then pinnedHere[#pinnedHere + 1] = pin.metricId end
+        end
+        do local sy = vy(y); if sy >= contentStart and sy <= H then
+          origPut(2, sy, targetLabel .. ": " .. table.concat(pinnedHere, ", "), C.pinnedHdr, C.bg)
+        end end
+        y = y + 1
+      end
+    end
+
+  else
+    -- Area overview
+    local area
+    for _, a in ipairs(areas) do
+      if a.id == activeArea then area = a; break end
+    end
+
+    if area then
+      -- All ON / OFF
+      local onLabel  = " All ON "
+      local offLabel = " All OFF"
+      local onX      = W - #onLabel - #offLabel + 1
+      do local sy = vy(y); if sy >= contentStart and sy <= H then
+        origPut(onX, sy, onLabel, colors.white, C.btnAllOn)
+        origPut(onX + #onLabel, sy, offLabel, colors.white, C.btnAllOff)
+      end end
+      saddButton(onX, y, onX + #onLabel - 1, y, function()
+        server.sendControlToArea(area.id, "power", true)
+        server.sendControlToArea(area.id, "light", true)
+        return "refresh"
+      end)
+      saddButton(onX + #onLabel, y, W, y, function()
+        server.sendControlToArea(area.id, "power", false)
+        server.sendControlToArea(area.id, "light", false)
+        return "refresh"
+      end)
+      y = y + 2
+
+      do local sy = vy(y); if sy >= contentStart and sy <= H then sdivider(y, "Nodes") end end
+      y = y + 1
+
+      for _, nodeId in ipairs(area.nodes or {}) do
+        local nodeDef = idx[nodeId]
+        local ns      = state[nodeId]
+        if nodeDef then
+          local status = (ns and ns.status) or "offline"
+          local label  = nodeDef.label or nodeId
+          do local sy = vy(y); if sy >= contentStart and sy <= H then
+            origPut(2, sy, STATUS_ICON[status] or "?", STATUS_COLOR[status] or C.dim, C.bg)
+            origPut(4, sy, label, C.text, C.bg)
+            origPut(W, sy, ">", C.dim, C.bg)
+          end end
+          local capturedId = nodeId
+          saddButton(1, y, W, y, function() return "node:" .. capturedId end)
+          y = y + 1
+
+          do local sy = vy(y); if sy >= contentStart and sy <= H then
+            origPut(2, sy, string.rep("\x8c", W - 2), C.panel, C.bg)
+          end end
+          y = y + 1
+        end
+      end
+
+      local pinned = getPinnedFor(area.id, server)
+      if #pinned > 0 then
+        y = y + 1
+        do local sy = vy(y); if sy >= contentStart and sy <= H then sdivider(y, "Pinned") end end
+        y = y + 1
+        for _, p in ipairs(pinned) do y = sdrawMetric(y, p.metric, p.sourceLabel) end
+      end
+    end
+  end
+
+  -- Scroll indicators
+  local totalVirtual = y - 1
+  if scrollY > 0 then
+    origPut(W, contentStart, "\x18", C.dim, C.bg)
+    addButton(W, contentStart, W, contentStart, function() return "scroll:-3" end)
+  end
+  if totalVirtual > (H - contentStart + 1 + scrollY) then
+    origPut(W, H, "\x19", C.dim, C.bg)
+    addButton(W, H, W, H, function() return "scroll:3" end)
   end
 end
 
 -- ─────────────────────────────────────────
--- Main UI Entry Point
--- Basalt 1: addMonitor(name) for monitor frames, autoUpdate() for event loop
+-- Entry point
 -- ─────────────────────────────────────────
 function ui.run(server)
-  local ok, basalt = pcall(require, "basalt")
-  if not ok then
-    error("[ui] Basalt not found.")
+  local monName = nil
+  for _, side in ipairs({"top","bottom","left","right","front","back"}) do
+    if peripheral.getType(side) == "monitor" then
+      monName = side; break
+    end
   end
-
-  -- Find monitor peripheral name
-  local monitorName = peripheral.find and peripheral.getName(peripheral.find("monitor"))
-  if not monitorName then
-    -- fallback: scan sides
-    for _, side in ipairs({"top","bottom","left","right","front","back"}) do
-      if peripheral.getType(side) == "monitor" then
-        monitorName = side
-        break
+  if not monName then
+    -- Try wired peripherals
+    for _, name in ipairs(peripheral.getNames()) do
+      if peripheral.getType(name) == "monitor" then
+        monName = name; break
       end
     end
   end
-
-  if not monitorName then
-    error("[ui] No monitor found.")
+  if not monName then
+    print("[ui] No monitor found – running headless.")
+    while true do os.sleep(60) end
   end
 
-  local mon = peripheral.wrap(monitorName)
+  mon = peripheral.wrap(monName)
   mon.setTextScale(0.5)
-  local w, h = mon.getSize()
+  W, H = mon.getSize()
 
   local registry   = server.getRegistry()
   local areas      = registry.areas or {}
-  local TAB_H      = 2
-  local contentH   = h - TAB_H
-
   local activeArea = areas[1] and areas[1].id or nil
   local activeNode = nil
+  local scrollY    = 0  -- virtual rows scrolled past top
 
-  -- scrollOffset per view key
-  local scrollOffset = {}
-  local needsRebuild = false
-
-  -- ── Direct terminal rendering helpers ────────────────────────
-  -- We render content directly to the monitor to avoid Basalt
-  -- internal state issues when rebuilding during event handling.
-
-  local function setCursor(x, y)
-    mon.setCursorPos(x, y)
+  local function doRender()
+    render(server, areas, activeArea, activeNode, scrollY)
   end
 
-  local function writeColored(x, y, text, fg, bg)
-    mon.setCursorPos(x, y)
-    mon.setTextColor(fg or COLORS.text)
-    mon.setBackgroundColor(bg or COLORS.bg)
-    mon.write(text)
-  end
-
-  local function clearContent()
-    mon.setBackgroundColor(COLORS.bg)
-    for row = TAB_H + 1, h do
-      mon.setCursorPos(1, row)
-      mon.write(string.rep(" ", w))
-    end
-  end
-
-  -- Render a metric directly to monitor, returns next y
-  local function renderMetricBar(y, m, sourceLabel, yMin, yMax)
-    if y > yMax then return y end
-    local MT = require("lib/metrics").TYPE
-
-    local labelText = m.label
-    if sourceLabel then labelText = labelText .. "  [" .. sourceLabel .. "]" end
-    local valText = formatMetricValue(m)
-
-    writeColored(2, y, labelText, COLORS.textLabel, COLORS.bg)
-    writeColored(w - #valText, y, valText,
-      warnIcon(m) ~= "" and COLORS.warn or COLORS.textDim, COLORS.bg)
-    y = y + 1
-
-    if m.type == MT.BAR and m.max and m.max > 0 and y <= yMax then
-      local barW   = w - 2
-      local filled = math.floor((m.value / m.max) * barW)
-      filled       = math.max(0, math.min(barW, filled))
-      local bar    = string.rep("\x8f", filled) .. string.rep("\x8c", barW - filled)
-      writeColored(2, y, bar, barColor(m), COLORS.barBg)
-      y = y + 1
-    elseif m.type == MT.RATE then
-      local col = m.direction == "in"  and COLORS.rateIn  or
-                  m.direction == "out" and COLORS.rateOut or COLORS.rateNet
-      writeColored(w - #valText, y - 1, valText, col, COLORS.bg)
-    end
-
-    return y + 1
-  end
-
-  local function renderDivider(y, label, yMax)
-    if y > yMax then return y end
-    local line
-    if label and label ~= "" then
-      line = "\x8c\x8c " .. label .. " " .. string.rep("\x8c", math.max(0, w - #label - 5))
-    else
-      line = string.rep("\x8c", w)
-    end
-    writeColored(1, y, line, COLORS.divider, COLORS.bg)
-    return y + 1
-  end
-
-  -- ── Tab bar (Basalt) ─────────────────────────────────────────
-  local monFrame = basalt.addMonitor(monitorName)
-  monFrame:setBackground(COLORS.bgTab)
-
-  local tabButtons = {}
-
-  local function updateTabBar()
-    -- Update button colors to reflect active tab
-    for areaId, btn in pairs(tabButtons) do
-      local isActive = areaId == activeArea
-      btn:setForegroundColor(isActive and COLORS.text or COLORS.textDim)
-      btn:setBackgroundColor(isActive and COLORS.bgTabActive or COLORS.bgTab)
-    end
-  end
-
-  local x = 1
-  for _, area in ipairs(areas) do
-    local label = " " .. (area.label or area.id) .. " "
-    local btn = monFrame:addButton()
-      :setPosition(x, 1)
-      :setSize(#label, 1)
-      :setText(label)
-      :setForegroundColor(area.id == activeArea and COLORS.text or COLORS.textDim)
-      :setBackgroundColor(area.id == activeArea and COLORS.bgTabActive or COLORS.bgTab)
-
-    local capturedId = area.id
-    btn:onClick(function()
-      activeArea = capturedId
+  local function handleAction(action)
+    if not action then return end
+    if action:sub(1, 4) == "tab:" then
+      activeArea = action:sub(5)
       activeNode = nil
-      scrollOffset[activeArea] = 0
-      needsRebuild = true
-    end)
-
-    tabButtons[area.id] = btn
-    x = x + #label + 1
-  end
-
-  -- ── Content renderer ─────────────────────────────────────────
-  local function renderContent()
-    clearContent()
-    updateTabBar()
-
-    local yMin   = TAB_H + 1
-    local yMax   = h
-    local viewKey = activeNode or activeArea or ""
-    local offset  = scrollOffset[viewKey] or 0
-
-    -- We render into a virtual buffer then slice by offset
-    -- Simple approach: render all, clip to monitor height
-    local y = yMin - offset
-
-    local function vy(row) return row end  -- virtual y
-
-    if activeArea == "me_network" then
-      local ns     = server.getNodeState("me_network") or { metrics = {}, status = "offline" }
-      local status = ns.status or "offline"
-
-      if y >= yMin and y <= yMax then
-        writeColored(2, y, "ME Network", COLORS.text, COLORS.bg)
-        writeColored(w - 3, y, statusIcon(status), statusColor(status), COLORS.bg)
-      end
-      y = y + 2
-
-      local meOrder = { "me_energy", "me_usage", "me_items", "me_fluids" }
-      for _, id in ipairs(meOrder) do
-        local m = ns.metrics and ns.metrics[id]
-        if m then
-          if y >= yMin then
-            y = renderMetricBar(y, m, nil, yMin, yMax)
-          else
-            -- skip lines above scroll
-            local skip = require("lib/metrics").TYPE
-            local lines = (m.type == skip.BAR and m.max and m.max > 0) and 3 or 2
-            y = y + lines
-          end
-        end
-      end
-
-      -- Watch items
-      local watchItems = {}
-      if ns.metrics then
-        for id, m in pairs(ns.metrics) do
-          if id:sub(1, 5) == "item_" then watchItems[#watchItems + 1] = m end
-        end
-      end
-
-      if #watchItems > 0 then
-        y = y + 1
-        if y >= yMin and y <= yMax then y = renderDivider(y, "Watch Items", yMax)
-        else y = y + 1 end
-        y = y + 1
-
-        table.sort(watchItems, function(a, b) return a.label < b.label end)
-        for _, m in ipairs(watchItems) do
-          if y >= yMin and y <= yMax then
-            y = renderMetricBar(y, m, nil, yMin, yMax)
-          else
-            y = y + 3
-          end
-        end
-      end
-
-      -- Pinned
-      local pinned = getPinnedFor("me_network", server)
-      if #pinned > 0 then
-        y = y + 1
-        if y >= yMin and y <= yMax then y = renderDivider(y, "Pinned from nodes", yMax)
-        else y = y + 1 end
-        y = y + 1
-        for _, p in ipairs(pinned) do
-          if y >= yMin and y <= yMax then
-            y = renderMetricBar(y, p.metric, p.sourceLabel, yMin, yMax)
-          else
-            y = y + 3
-          end
-        end
-      end
-
-    elseif activeNode then
-      local idx     = server.getNodeIndex()
-      local state   = server.getState()
-      local nodeDef = idx[activeNode]
-      local ns      = state[activeNode]
-
-      if not nodeDef then
-        writeColored(2, yMin, "Node not found: " .. activeNode, COLORS.crit, COLORS.bg)
-        return
-      end
-
-      local status   = (ns and ns.status) or "offline"
-      local disabled = status == "unreachable" or status == "offline"
-
-      -- Back button rendered via Basalt would conflict, so render as text hint
-      if y >= yMin and y <= yMax then
-        writeColored(2, y, "[ < Back ]", COLORS.textDim, COLORS.bg)
-        writeColored(14, y, statusIcon(status), statusColor(status), COLORS.bg)
-        writeColored(16, y, nodeDef.label or activeNode, COLORS.text, COLORS.bg)
-      end
-      y = y + 2
-
-      -- Controls
-      local controls = nodeDef.controls or {}
-      if #controls > 0 then
-        if y >= yMin and y <= yMax then y = renderDivider(y, "Controls", yMax)
-        else y = y + 1 end
-        y = y + 1
-
-        for _, control in ipairs(controls) do
-          if y >= yMin and y <= yMax then
-            local currentVal = ns and ns.controls and ns.controls[control.id] or false
-            writeColored(2, y, control.label or control.id,
-              disabled and COLORS.textDim or COLORS.textLabel, COLORS.bg)
-
-            if control.type == "toggle" then
-              local sliderText, sliderCol
-              if disabled then
-                sliderText = "[ .......... ]"
-                sliderCol  = COLORS.sliderDis
-              elseif currentVal then
-                sliderText = "[ \x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x95 ON  ]"
-                sliderCol  = COLORS.sliderOn
-              else
-                sliderText = "[ OFF \x95\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c ]"
-                sliderCol  = COLORS.sliderOff
-              end
-              writeColored(18, y, sliderText, sliderCol, COLORS.bg)
-            elseif control.type == "trigger" then
-              local col = disabled and COLORS.sliderDis or
-                          (control.color == "red" and COLORS.crit or colors.blue)
-              writeColored(18, y, "[ TRIGGER ]", colors.white, col)
-            end
-          end
-          y = y + 2
-        end
-      end
-
-      -- Metrics
-      local metricList = {}
-      if ns and ns.metrics then
-        for _, m in pairs(ns.metrics) do
-          if m.type ~= require("lib/metrics").TYPE.TOGGLE then
-            metricList[#metricList + 1] = m
-          end
-        end
-      end
-
-      if #metricList > 0 then
-        y = y + 1
-        if y >= yMin and y <= yMax then y = renderDivider(y, "Metrics", yMax)
-        else y = y + 1 end
-        y = y + 1
-        for _, m in ipairs(metricList) do
-          if y >= yMin then
-            y = renderMetricBar(y, m, nil, yMin, yMax)
-          else
-            y = y + 3
-          end
-        end
-      end
-
-      -- Pinned in
-      local targets = getPinnedTargets(nodeDef)
-      if #targets > 0 then
-        y = y + 1
-        if y >= yMin and y <= yMax then y = renderDivider(y, "Pinned in", yMax)
-        else y = y + 1 end
-        y = y + 1
-        local reg = server.getRegistry()
-        for _, targetId in ipairs(targets) do
-          local targetLabel = targetId
-          for _, area in ipairs(reg.areas) do
-            if area.id == targetId then targetLabel = area.label or targetId; break end
-          end
-          local pinnedHere = {}
-          for _, pin in ipairs(nodeDef.pinMetrics or {}) do
-            if pin.to == targetId then pinnedHere[#pinnedHere + 1] = pin.metricId end
-          end
-          if y >= yMin and y <= yMax then
-            writeColored(2, y, targetLabel .. ": " .. table.concat(pinnedHere, ", "),
-              COLORS.pinnedHdr, COLORS.bg)
-          end
-          y = y + 1
-        end
-      end
-
-    else
-      -- Area overview
-      local area
-      for _, a in ipairs(areas) do
-        if a.id == activeArea then area = a; break end
-      end
-
-      if area then
-        local state = server.getState()
-        local idx   = server.getNodeIndex()
-
-        if y >= yMin and y <= yMax then
-          writeColored(w - 16, y, " All ON ", COLORS.text, COLORS.btnAllOn)
-          writeColored(w - 7,  y, "All OFF ", COLORS.text, COLORS.btnAllOff)
-        end
-        y = y + 2
-
-        if y >= yMin and y <= yMax then y = renderDivider(y, "Nodes", yMax)
-        else y = y + 1 end
-        y = y + 1
-
-        for _, nodeId in ipairs(area.nodes or {}) do
-          local nodeDef = idx[nodeId]
-          local ns      = state[nodeId]
-          if nodeDef then
-            if y >= yMin and y <= yMax then
-              local status = (ns and ns.status) or "offline"
-              local label  = nodeDef.label or nodeId
-              writeColored(2, y, statusIcon(status), statusColor(status), COLORS.bg)
-              writeColored(4, y, label, COLORS.text, COLORS.bg)
-              writeColored(w - 1, y, ">", COLORS.textDim, COLORS.bg)
-            end
-            y = y + 1
-            if y >= yMin and y <= yMax then
-              writeColored(2, y, string.rep("\x8c", w - 3), COLORS.bgPanel, COLORS.bg)
-            end
-            y = y + 1
-          end
-        end
-
-        local pinned = getPinnedFor(area.id, server)
-        if #pinned > 0 then
-          y = y + 1
-          if y >= yMin and y <= yMax then y = renderDivider(y, "Pinned", yMax)
-          else y = y + 1 end
-          y = y + 1
-          for _, p in ipairs(pinned) do
-            if y >= yMin then
-              y = renderMetricBar(y, p.metric, p.sourceLabel, yMin, yMax)
-            else
-              y = y + 3
-            end
-          end
-        end
-      end
-    end
-
-    -- Scroll indicator
-    if y - 1 > yMax then
-      writeColored(w, yMax, "\x19", COLORS.textDim, COLORS.bg)
-    end
-    if offset > 0 then
-      writeColored(w, yMin, "\x18", COLORS.textDim, COLORS.bg)
+      scrollY    = 0
+      doRender()
+    elseif action:sub(1, 5) == "node:" then
+      activeNode = action:sub(6)
+      scrollY    = 0
+      doRender()
+    elseif action == "back" then
+      activeNode = nil
+      scrollY    = 0
+      doRender()
+    elseif action == "refresh" then
+      doRender()
+    elseif action:sub(1, 7) == "scroll:" then
+      local delta = tonumber(action:sub(8)) or 0
+      scrollY = math.max(0, scrollY + delta)
+      doRender()
     end
   end
 
-  -- ── Touch handler for content area ───────────────────────────
-  -- We intercept monitor_touch events manually for content clicks
-  local function handleTouch(mx, my)
-    local yMin = TAB_H + 1
+  doRender()
 
-    -- Scroll arrows
-    if mx == w and my == h then
-      local viewKey = activeNode or activeArea or ""
-      scrollOffset[viewKey] = (scrollOffset[viewKey] or 0) + 2
-      needsRebuild = true
-      return
-    end
-    if mx == w and my == yMin then
-      local viewKey = activeNode or activeArea or ""
-      scrollOffset[viewKey] = math.max(0, (scrollOffset[viewKey] or 0) - 2)
-      needsRebuild = true
-      return
-    end
+  local refreshTimer = os.startTimer(5)
 
-    if my < yMin then return end  -- tab bar handled by Basalt
+  while true do
+    local event, p1, p2, p3 = os.pullEvent()
 
-    local offset  = scrollOffset[activeNode or activeArea or ""] or 0
-    local virtualY = my + offset
+    if event == "monitor_touch" and p1 == monName then
+      local action = hitTest(p2, p3)
+      handleAction(action)
 
-    if activeNode then
-      -- Back button on row yMin (virtual row yMin)
-      if virtualY == yMin and mx <= 10 then
-        activeNode = nil
-        scrollOffset[activeArea] = scrollOffset[activeArea] or 0
-        needsRebuild = true
-        return
-      end
-
-      -- Toggle controls: find by position
-      local idx     = server.getNodeIndex()
-      local state   = server.getState()
-      local nodeDef = idx[activeNode]
-      local ns      = state[activeNode]
-      if not nodeDef then return end
-
-      local status   = (ns and ns.status) or "offline"
-      local disabled = status == "unreachable" or status == "offline"
-      if disabled then return end
-
-      local scanY = yMin + 2  -- after header
-      local controls = nodeDef.controls or {}
-      if #controls > 0 then
-        scanY = scanY + 2  -- divider + blank
-        for _, control in ipairs(controls) do
-          if virtualY == scanY and mx >= 18 then
-            if control.type == "toggle" then
-              local currentVal = ns and ns.controls and ns.controls[control.id] or false
-              local ok, err = server.sendControl(activeNode, control.id, not currentVal)
-              if not ok then print("[ui] Control failed: " .. tostring(err)) end
-              needsRebuild = true
-            elseif control.type == "trigger" then
-              server.sendControl(activeNode, control.id, true)
-            end
-            return
-          end
-          scanY = scanY + 2
-        end
-      end
-
-    elseif activeArea ~= "me_network" then
-      -- Node list: each node takes 2 rows
-      local area
-      for _, a in ipairs(areas) do
-        if a.id == activeArea then area = a; break end
-      end
-      if not area then return end
-
-      local idx    = server.getNodeIndex()
-      local scanY  = yMin + 4  -- header + divider + blank
-      for _, nodeId in ipairs(area.nodes or {}) do
-        local nodeDef = idx[nodeId]
-        if nodeDef then
-          if virtualY == scanY then
-            activeNode = nodeId
-            scrollOffset[nodeId] = scrollOffset[nodeId] or 0
-            needsRebuild = true
-            return
-          end
-          scanY = scanY + 2
-        end
-      end
+    elseif event == "timer" and p1 == refreshTimer then
+      doRender()
+      refreshTimer = os.startTimer(5)
     end
   end
-
-  -- ── Main event loop ───────────────────────────────────────────
-  renderContent()
-
-  local function eventLoop()
-    while true do
-      local event, p1, p2, p3 = os.pullEvent()
-
-      if event == "monitor_touch" and p1 == monitorName then
-        if p3 >= TAB_H + 1 then  -- below tab bar
-          handleTouch(p2, p3)
-        end
-        -- tab bar clicks handled by basalt.autoUpdate below
-
-      elseif event == "timer" then
-        -- periodic refresh
-      end
-
-      if needsRebuild then
-        needsRebuild = false
-        renderContent()
-      end
-    end
-  end
-
-  local function refreshLoop()
-    while true do
-      os.sleep(5)
-      renderContent()
-    end
-  end
-
-  -- autoUpdate handles tab bar clicks; eventLoop handles content clicks
-  parallel.waitForAny(
-    function() basalt.autoUpdate() end,
-    eventLoop,
-    refreshLoop
-  )
 end
 
 return ui

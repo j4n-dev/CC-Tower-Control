@@ -3,10 +3,9 @@
 --   wget https://raw.githubusercontent.com/j4n-dev/CC-Tower-Control/master/bootstrap.lua startup.lua && reboot
 --
 -- On every boot:
---   1. Ensure Basalt is installed (all computers, needed for node monitors too)
---   2. Pull latest version from GitHub if changed
---   3. Run guided setup if no node.cfg exists
---   4. Launch server.lua or client.lua based on role
+--   1. Pull latest version from GitHub if changed
+--   2. Run guided setup if no node.cfg exists
+--   3. Launch server.lua or client.lua based on role
 
 
 -- CONFIG - set to your repo
@@ -67,31 +66,6 @@ local function trim(s)
   return s and s:match("^%s*(.-)%s*$") or ""
 end
 
-
--- Basalt Installer
--- Runs on every computer - clients need Basalt for node monitors.
--- Skipped silently if already installed.
-
-local function ensureBasalt()
-  print("[bootstrap] Checking Basalt installation...")
-  if fs.exists("basalt.lua") then
-    print("[bootstrap] Basalt already installed, skipping.")
-    return
-  end
-  print("[bootstrap] Basalt not found. Installing Basalt UI library...")
-  local body = httpGet("https://raw.githubusercontent.com/Pyroxenium/Basalt/refs/heads/master/docs/install.lua")
-  if not body then
-    print("[bootstrap] Could not reach Basalt CDN-UI will be unavailable.")
-    print("[bootstrap] Continuing without Basalt...")
-    return
-  end
-  writeFile("basalt_install.lua", body)
-  shell.run("basalt_install.lua release")
-  fs.delete("basalt_install.lua")
-  print("[bootstrap] Basalt installed.")
-end
-
-
 -- Version Check & Update
 
 local function checkAndUpdate(fileList)
@@ -147,8 +121,6 @@ local function selectRole()
       nodeId = "server",
     }))
     print("Server role saved.")
-
-    ensureBasalt()
 
     print("Finished initial setup. Reboot now? [y/n]")
     os.sleep(1)
