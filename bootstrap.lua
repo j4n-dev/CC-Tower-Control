@@ -22,6 +22,7 @@ local CLIENT_FILES = {
   "lib/ui.lua",
   "client.lua",
   "setup.lua",
+  "config.json",
   "version",
 }
 
@@ -31,6 +32,7 @@ local SERVER_FILES = {
   "lib/ui.lua",
   "server.lua",
   "setup.lua",
+  "config.json",
   "version",
 }
 
@@ -163,8 +165,6 @@ end
 
 -- Main
 
-print("Tower Control - Bootstrap")
-print("==========================")
 
 -- Determine file list based on existing role (if any)
 local existingCfg
@@ -180,12 +180,13 @@ local fileList = isServer and SERVER_FILES or CLIENT_FILES
 -- 1. First-time setup if no config yet
 if not fs.exists(CFG_FILE) then
   selectRole()
-  -- Install Basalt in the first run of both server and clients
-  ensureBasalt()
   return
 end
 
--- 2. Update files from GitHub
+print("Tower Control - Bootstrap")
+print("==========================")
+
+-- 2. Check for updates
 checkAndUpdate(fileList)
 
 -- 3. Launch
