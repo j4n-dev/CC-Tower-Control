@@ -599,8 +599,9 @@ function ui.run(server)
   monFrame:setBackground(COLORS.bg)
 
   local function rebuild()
-    -- Remove all children and rebuild
-    monFrame:removeAll()
+    -- Recreate the monitor frame to clear all children
+    monFrame = basalt.addMonitor(monitorName)
+    monFrame:setBackground(COLORS.bg)
 
     -- ── Tab bar ──────────────────────────────────────────────
     local tabBar = monFrame:addFrame()

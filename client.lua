@@ -218,7 +218,9 @@ local function monitorLoop()
   monFrame:setBackground(C.bg)
 
   local function render()
-    monFrame:removeAll()
+    -- Recreate the monitor frame to clear all children
+    monFrame = basalt.addMonitor(monitorSide)
+    monFrame:setBackground(C.bg)
 
     local y              = 1
     local currentMetrics = collectMetrics()

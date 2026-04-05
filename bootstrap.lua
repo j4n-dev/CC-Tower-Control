@@ -73,8 +73,9 @@ end
 -- Skipped silently if already installed.
 
 local function ensureBasalt()
+  print("[bootstrap] Checking Basalt installation...")
   if fs.exists("basalt.lua") then return end
-  print("[bootstrap] Installing Basalt...")
+  print("[bootstrap] Basalt not found. Installing Basalt UI library...")
   local body = httpGet("https://raw.githubusercontent.com/Pyroxenium/Basalt/refs/heads/master/docs/install.lua")
   if not body then
     print("[bootstrap] Could not reach Basalt CDN-UI will be unavailable.")
@@ -85,6 +86,8 @@ local function ensureBasalt()
   shell.run("basalt_install.lua release")
   fs.delete("basalt_install.lua")
   print("[bootstrap] Basalt installed.")
+  else
+    print("[bootstrap] Basalt already installed.")
 end
 
 
@@ -134,7 +137,6 @@ local function selectRole()
   print("")
   print("=== Tower Control - First Boot ===")
   print("")
-  ensureBasalt()
   print("Is this the SERVER (control center)? [y/n]")
   local ans = read():lower()
 
@@ -144,8 +146,16 @@ local function selectRole()
       nodeId = "server",
     }))
     print("Server role saved.")
+
+    ensureBasalt()
+
+    print("Finished initial setup. Reboot now? [y/n]")
     os.sleep(1)
+
+      local ans = read():lower()
+  if ans == "y" then
     os.reboot()
+  end
   end
 
   -- Client: run guided setup
