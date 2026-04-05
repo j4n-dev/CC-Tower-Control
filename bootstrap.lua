@@ -101,6 +101,7 @@ local function selectRole()
     print("")
     print("Is this the SERVER (control center)? [y/n]")
     local ans = read():lower()
+    local isServer = existingCfg and existingCfg.role == "server"
     local fileList = isServer and SERVER_FILES or CLIENT_FILES
 
     if ans == "y" then
@@ -148,7 +149,6 @@ if fs.exists(CFG_FILE) then
     f.close()
 end
 
-local isServer = existingCfg and existingCfg.role == "server"
 
 -- 1. First-time setup if no config yet
 if not fs.exists(CFG_FILE) then
