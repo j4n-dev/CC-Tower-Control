@@ -82,7 +82,7 @@ local function ensureBasalt()
     return
   end
   writeFile("basalt_install.lua", body)
-  shell.run("basalt_install.lua")
+  shell.run("basalt_install.lua release")
   fs.delete("basalt_install.lua")
   print("[bootstrap] Basalt installed.")
 end
