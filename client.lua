@@ -215,7 +215,12 @@ local function run()
     mon.setTextScale(0.5)
   end
 
-  local W, H = mon and mon.getSize() or 0, 0
+  local W, H
+  if mon then
+    W, H = mon.getSize()
+  else
+    W, H = 0, 0
+  end
 
   local C = {
     bg       = colors.black,
