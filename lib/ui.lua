@@ -454,25 +454,53 @@ local function render(server, areas, activeArea, activeNode, scrollY)
   mon.clear()
   buttons = {}
 
-  -- Tab bar (row 1)
-  fillLine(1, C.tabDim, C.tabBg)
+  -- ── Header row 1 ─────────────────────────────────────────────
+  local function loadVersion()
+    if not fs.exists("version") then return "?" end
+    local f = fs.open("version", "r")
+    local v = f.readAll():match("^%s*(.-)%s*$")
+    f.close()
+    return v
+  end
+
+  local function fmtTime()
+    local t = os.time("local")
+    return string.format("%02d:%02d", math.floor(t), math.floor((t % 1) * 60))
+  end
+
+  local function fmtDate()
+    local d = os.date("*t")
+    if d then return string.format("%04d-%02d-%02d", d.year, d.month, d.day) end
+    return ""
+  end
+
+  local vStr    = loadVersion()
+  local title   = "City Control Center v" .. vStr
+  local timeStr = fmtTime() .. "  " .. fmtDate()
+
+  fillLine(1, C.text, C.tabBg)
+  put(2, 1, title, C.text, C.tabBg)
+  put(W - #timeStr, 1, timeStr, C.tabDim, C.tabBg)
+
+  -- ── Tab bar row 2 ─────────────────────────────────────────────
+  fillLine(2, C.tabDim, C.tabBg)
   local tx = 1
   for _, area in ipairs(areas) do
     local label    = " " .. (area.label or area.id) .. " "
     local isActive = area.id == activeArea
-    put(tx, 1, label,
+    put(tx, 2, label,
       isActive and C.tabText or C.tabDim,
       isActive and C.tabActive or C.tabBg)
     local capturedId = area.id
-    addButton(tx, 1, tx + #label - 1, 1, function() return "tab:" .. capturedId end)
+    addButton(tx, 2, tx + #label - 1, 2, function() return "tab:" .. capturedId end)
     tx = tx + #label + 1
   end
 
-  -- Divider row 2
-  put(1, 2, string.rep("\x8c", W), C.divider, C.bg)
+  -- Divider row 3
+  put(1, 3, string.rep("\x8c", W), C.divider, C.bg)
 
-  -- Content starts at row 3, offset by scroll
-  local contentStart = 3
+  -- Content starts at row 4, offset by scroll
+  local contentStart = 4
   local state        = server.getState()
   local idx          = server.getNodeIndex()
 
