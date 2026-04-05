@@ -1,6 +1,6 @@
 -- bootstrap.lua  (= startup.lua on every computer)
 -- One-liner install:
---   wget https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/bootstrap.lua startup.lua && reboot
+--   wget https://raw.githubusercontent.com/j4n-dev/CC-Tower-Control/master/bootstrap.lua startup.lua && reboot
 --
 -- On every boot:
 --   1. Ensure Basalt is installed (all computers, needed for node monitors too)
@@ -11,7 +11,7 @@
 -- ─────────────────────────────────────────
 -- CONFIG – set to your repo
 -- ─────────────────────────────────────────
-local GITHUB_RAW  = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main"
+local GITHUB_RAW  = "https://raw.githubusercontent.com/j4n-dev/CC-Tower-Control/master"
 local CFG_FILE    = "node.cfg"
 local VERSION_URL = GITHUB_RAW .. "/version"
 
