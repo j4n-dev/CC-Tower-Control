@@ -110,7 +110,7 @@ local function formatMetricValue(m)
   elseif m.type == MT.VALUE then
     return formatNum(m.value) .. " " .. (m.unit or "") .. warnIcon(m)
   elseif m.type == MT.TOGGLE then
-    return m.value and "AN" or "AUS"
+    return m.value and "ON" or "OFF"
   end
   return tostring(m.value)
 end
@@ -253,10 +253,10 @@ local function addSlider(frame, y, control, currentValue, disabled, onToggle)
   else
     local sliderText, sliderCol
     if isOn then
-      sliderText = "[ \x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x95 AN  ]"
+      sliderText = "[ \x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x95 ON  ]"
       sliderCol  = COLORS.sliderOn
     else
-      sliderText = "[ AUS \x95\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c ]"
+      sliderText = "[ OFF \x95\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c\x8c ]"
       sliderCol  = COLORS.sliderOff
     end
 
@@ -290,7 +290,7 @@ local function buildAreaScreen(scrollFrame, area, server, onNodeSelect)
   scrollFrame:addButton()
     :setPosition(w - 16, y)
     :setSize(8, 1)
-    :setText(" Alle AN")
+    :setText(" All ON")
     :setForegroundColor(colors.white)
     :setBackgroundColor(COLORS.btnAllOn)
     :onClick(function()
@@ -301,7 +301,7 @@ local function buildAreaScreen(scrollFrame, area, server, onNodeSelect)
   scrollFrame:addButton()
     :setPosition(w - 7, y)
     :setSize(8, 1)
-    :setText("Alle AUS")
+    :setText("All OFF")
     :setForegroundColor(colors.white)
     :setBackgroundColor(COLORS.btnAllOff)
     :onClick(function()
@@ -357,7 +357,7 @@ local function buildAreaScreen(scrollFrame, area, server, onNodeSelect)
   local pinned = getPinnedFor(area.id, server)
   if #pinned > 0 then
     y = y + 1
-    y = addDivider(scrollFrame, y, "Eingeblendet")
+    y = addDivider(scrollFrame, y, "Pinned")
     y = y + 1
 
     for _, p in ipairs(pinned) do
@@ -391,7 +391,7 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
   frame:addButton()
     :setPosition(1, y)
     :setSize(10, 1)
-    :setText("< Zuruck")
+    :setText("< Back")
     :setForegroundColor(COLORS.text)
     :setBackgroundColor(COLORS.btnBack)
     :onClick(function()
@@ -443,7 +443,7 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
           local btn = frame:addButton()
             :setPosition(18, y)
             :setSize(12, 1)
-            :setText("[ AUSLOESEN ]")
+            :setText("[ TRIGGER   ]")
             :setForegroundColor(colors.white)
             :setBackgroundColor(col)
 
@@ -475,7 +475,7 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
 
   if #metricList > 0 then
     y = y + 1
-    y = addDivider(frame, y, "Metriken")
+    y = addDivider(frame, y, "Metrics")
     y = y + 1
 
     for _, m in ipairs(metricList) do
@@ -487,7 +487,7 @@ local function buildDetailScreen(frame, nodeId, server, onBack)
   local targets = getPinnedTargets(nodeDef)
   if #targets > 0 then
     y = y + 1
-    y = addDivider(frame, y, "Gepinnt in")
+    y = addDivider(frame, y, "Pinned in")
     y = y + 1
 
     local reg = server.getRegistry()
@@ -616,7 +616,7 @@ local function buildMEScreen(frame, server)
   local pinned = getPinnedFor("me_network", server)
   if #pinned > 0 then
     y = y + 1
-    y = addDivider(frame, y, "Eingeblendet von anderen Nodes")
+    y = addDivider(frame, y, "Pinned from other nodes")
     y = y + 1
 
     for _, p in ipairs(pinned) do
@@ -630,7 +630,8 @@ end
 
 local function buildTabBar(basalt, monitor, areas, activeAreaId, onTabSelect)
   local w, _  = monitor:getSize()
-  local tabBar = basalt:addFrame()
+  local tabBar = basalt.addFrame()
+    :setMonitor(monitor)
     :setPosition(1, 1)
     :setSize(w, 1)
     :setBackground(COLORS.bgTab)
@@ -698,7 +699,8 @@ function ui.run(server)
     end)
 
     -- Content frame
-    local content = basalt:addFrame()
+    local content = basalt.addFrame()
+      :setMonitor(monitor)
       :setPosition(1, TAB_H + 1)
       :setSize(w, contentH)
       :setBackground(COLORS.bg)

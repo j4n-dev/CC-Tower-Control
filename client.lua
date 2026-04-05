@@ -232,7 +232,7 @@ local function monitorLoop()
     mon.setBackgroundColor(C.bg)
     mon.clear()
 
-    local frame = basalt.createFrame()
+    local frame = basalt.addFrame()
       :setMonitor(mon)
       :setPosition(1, 1)
       :setSize(w, h)
