@@ -7,9 +7,9 @@
 local protocol = require("lib/protocol")
 local metrics  = require("lib/metrics")
 
--- ─────────────────────────────────────────
+
 -- Config
--- ─────────────────────────────────────────
+
 local VERSION      = "0.1.0"
 local CFG_FILE     = "node.cfg"
 local REPORT_EVERY = 10
@@ -27,11 +27,11 @@ end
 
 local cfg = loadConfig()
 
--- ─────────────────────────────────────────
+
 -- Dynamic Control Handlers
 -- Built from cfg.controls at startup.
 -- Executing a handler directly applies the redstone change locally.
--- ─────────────────────────────────────────
+
 local handlers = {}
 
 for _, control in ipairs(cfg.controls or {}) do
@@ -55,9 +55,9 @@ for _, control in ipairs(cfg.controls or {}) do
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Metric Collection
--- ─────────────────────────────────────────
+
 local function collectMetrics()
   local result = {}
 
@@ -86,9 +86,9 @@ local function collectMetrics()
   return result
 end
 
--- ─────────────────────────────────────────
+
 -- Registration
--- ─────────────────────────────────────────
+
 local function register()
   print("[client] Registering as " .. cfg.nodeId .. "...")
 
@@ -104,13 +104,13 @@ local function register()
   if response and response.ok then
     print("[client] Registered. Server acknowledged.")
   else
-    print("[client] No server response – will retry on next report.")
+    print("[client] No server response - will retry on next report.")
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Message Handler
--- ─────────────────────────────────────────
+
 local function handleMessage(senderId, msg)
   if not protocol.isValid(msg) then return end
 
@@ -143,9 +143,9 @@ local function handleMessage(senderId, msg)
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Network Loop
--- ─────────────────────────────────────────
+
 local function sendReport()
   protocol.send(cfg.serverId, protocol.msgReport(cfg.nodeId, collectMetrics()))
 end
@@ -175,24 +175,24 @@ local function networkLoop()
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Node Monitor UI
 -- Locked to this node. Controls are applied locally.
 -- Refreshes every 5 seconds.
--- ─────────────────────────────────────────
+
 local function monitorLoop()
   local monitorSide = cfg.nodeMonitorSide
   if not monitorSide then return end
 
   local ok, basalt = pcall(require, "basalt")
   if not ok then
-    print("[client] Basalt not available – node monitor disabled.")
+    print("[client] Basalt not available - node monitor disabled.")
     return
   end
 
   local mon = peripheral.wrap(monitorSide)
   if not mon then
-    print("[client] Monitor on '" .. monitorSide .. "' not found – node monitor disabled.")
+    print("[client] Monitor on '" .. monitorSide .. "' not found - node monitor disabled.")
     return
   end
 
@@ -433,9 +433,9 @@ local function monitorLoop()
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Main
--- ─────────────────────────────────────────
+
 print("[client] Tower Control Client v" .. VERSION)
 print("[client] Node: " .. cfg.nodeId .. " (\"" .. (cfg.label or "") .. "\")")
 

@@ -6,9 +6,9 @@
 local protocol = require("lib/protocol")
 local metrics  = require("lib/metrics")
 
--- ─────────────────────────────────────────
+
 -- Constants
--- ─────────────────────────────────────────
+
 local VERSION       = "0.1.0"
 local REGISTRY_FILE = "registry.json"
 local CONFIG_FILE   = "config.json"
@@ -20,9 +20,9 @@ local STATUS = {
   OFFLINE     = "offline",
 }
 
--- ─────────────────────────────────────────
+
 -- Config
--- ─────────────────────────────────────────
+
 local function loadConfig()
   if not fs.exists(CONFIG_FILE) then
     return {
@@ -50,9 +50,9 @@ local function getThresholds(nodeDef)
   }
 end
 
--- ─────────────────────────────────────────
+
 -- Registry
--- ─────────────────────────────────────────
+
 local function loadRegistry()
   if not fs.exists(REGISTRY_FILE) then
     return { areas = {}, nodes = {}, watchItems = {} }
@@ -84,9 +84,9 @@ end
 
 local nodeIndex = buildNodeIndex(registry)
 
--- ─────────────────────────────────────────
+
 -- Auto-Discovery
--- ─────────────────────────────────────────
+
 local function findOrCreateNode(nodeId, computerId, regMsg)
   if nodeIndex[nodeId] then
     nodeIndex[nodeId].computerId = computerId
@@ -130,9 +130,9 @@ local function findOrCreateNode(nodeId, computerId, regMsg)
   return nodeDef
 end
 
--- ─────────────────────────────────────────
+
 -- Runtime State
--- ─────────────────────────────────────────
+
 local state = {}
 
 local function ensureNodeState(nodeId, computerId)
@@ -166,9 +166,9 @@ local function updateMetrics(nodeId, metricList)
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Status Watchdog
--- ─────────────────────────────────────────
+
 local function runWatchdog()
   local nowMs = os.epoch("utc")
 
@@ -195,7 +195,7 @@ local function runWatchdog()
       elseif elapsed >= thresh.degraded then
         if s.status == STATUS.ONLINE then
           s.status = STATUS.DEGRADED
-          print("[server] DEGRADED: " .. nodeId .. " – pinging...")
+          print("[server] DEGRADED: " .. nodeId .. " - pinging...")
           if s.computerId then
             protocol.send(s.computerId, protocol.msgPing(nil))
             s.pingPending = true
@@ -206,9 +206,9 @@ local function runWatchdog()
   end
 end
 
--- ─────────────────────────────────────────
+
 -- ME Bridge Polling
--- ─────────────────────────────────────────
+
 local meBridge = peripheral.find("meBridge")
 
 local function pollME()
@@ -235,9 +235,9 @@ local function pollME()
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Control Commands
--- ─────────────────────────────────────────
+
 local function sendControl(nodeId, capability, value)
   local s = state[nodeId]
   if not s then
@@ -277,9 +277,9 @@ local function sendControlToArea(areaId, capability, value)
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Message Handler
--- ─────────────────────────────────────────
+
 local function handleMessage(senderId, msg)
   if not protocol.isValid(msg) then return end
 
@@ -324,9 +324,9 @@ local function handleMessage(senderId, msg)
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Public API (used by ui.lua)
--- ─────────────────────────────────────────
+
 local server = {}
 
 function server.getRegistry()        return registry   end
@@ -355,9 +355,9 @@ end
 server.sendControl       = sendControl
 server.sendControlToArea = sendControlToArea
 
--- ─────────────────────────────────────────
+
 -- Main
--- ─────────────────────────────────────────
+
 print("[server] Tower Control Server v" .. VERSION)
 protocol.open()
 

@@ -7,9 +7,9 @@
 
 local setup = {}
 
--- ─────────────────────────────────────────
+
 -- Terminal Helpers
--- ─────────────────────────────────────────
+
 local function clear()
   term.clear()
   term.setCursorPos(1, 1)
@@ -66,16 +66,16 @@ local function slugify(str)
             :gsub("_+$", "")
 end
 
--- ─────────────────────────────────────────
+
 -- Peripheral Scan
--- ─────────────────────────────────────────
+
 local SIDES = { "top", "bottom", "left", "right", "front", "back" }
 
 -- Known peripheral categories:
---   modem   → network, skip silently
---   metric  → user assigns a monitoring role
---   monitor → display, ask if node monitor
---   skip    → ignore
+--   modem   --> network, skip silently
+--   metric  --> user assigns a monitoring role
+--   monitor --> display, ask if node monitor
+--   skip    --> ignore
 local PERIPHERAL_TYPES = {
   modem                 = "modem",
   meBridge              = "metric",
@@ -126,16 +126,16 @@ local function configurePeripherals(found)
     local category = PERIPHERAL_TYPES[p.pType] or "metric"
 
     if category == "modem" then
-      -- Skip silently – just note it
-      print("  " .. p.side .. "  [" .. p.pType .. "]  → Network modem (automatic)")
+      -- Skip silently - just note it
+      print("  " .. p.side .. "  [" .. p.pType .. "]  --> Network modem (automatic)")
 
     elseif category == "monitor" then
       -- Monitors are handled separately below
-      print("  " .. p.side .. "  [monitor]  → Display detected")
+      print("  " .. p.side .. "  [monitor]  --> Display detected")
       monitors[#monitors + 1] = { side = p.side }
 
     elseif category == "metric" then
-      io.write("  " .. p.side .. "  [" .. p.pType .. "]  → Role? ")
+      io.write("  " .. p.side .. "  [" .. p.pType .. "]  --> Role? ")
       io.write("[" .. table.concat(METRIC_ROLES, "/") .. "]: ")
       local role = read():lower()
 
@@ -152,7 +152,7 @@ local function configurePeripherals(found)
           pType = p.pType,
           role  = role,
         }
-        print("    → " .. role)
+        print("    --> " .. role)
       end
     end
   end
@@ -160,9 +160,9 @@ local function configurePeripherals(found)
   return configured, monitors
 end
 
--- ─────────────────────────────────────────
+
 -- Monitor Configuration
--- ─────────────────────────────────────────
+
 local function configureMonitors(monitors)
   if #monitors == 0 then
     return nil
@@ -179,20 +179,20 @@ local function configureMonitors(monitors)
     if use then
       -- Only one node monitor per client
       nodeMonitor = m.side
-      print("  → Node display activated on side: " .. m.side)
+      print("  --> Node display activated on side: " .. m.side)
       -- Only ask about the first monitor; extras are ignored
       break
     else
-      print("  → Ignored.")
+      print("  --> Ignored.")
     end
   end
 
   return nodeMonitor
 end
 
--- ─────────────────────────────────────────
+
 -- Redstone Side Config
--- ─────────────────────────────────────────
+
 local function configureSides(occupied)
   local controls = {}
 
@@ -201,9 +201,9 @@ local function configureSides(occupied)
 
   for _, side in ipairs(SIDES) do
     if occupied[side] then
-      print("  " .. side .. "  → occupied by [" .. occupied[side] .. "], skip")
+      print("  " .. side .. "  --> occupied by [" .. occupied[side] .. "], skip")
     else
-      local use = promptYN("  " .. side .. "  → Use as control?", false)
+      local use = promptYN("  " .. side .. "  --> Use as control?", false)
       if use then
         print("")
         local id     = prompt("    ID (e.g. light, power, machines)")
@@ -229,12 +229,12 @@ local function configureSides(occupied)
   return controls
 end
 
--- ─────────────────────────────────────────
+
 -- Main Setup Flow
--- ─────────────────────────────────────────
+
 function setup.run()
   clear()
-  header("Tower Control – Node Setup")
+  header("Tower Control - Node Setup")
   print("")
 
   -- 1. Identity

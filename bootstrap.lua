@@ -8,14 +8,14 @@
 --   3. Run guided setup if no node.cfg exists
 --   4. Launch server.lua or client.lua based on role
 
--- ─────────────────────────────────────────
--- CONFIG – set to your repo
--- ─────────────────────────────────────────
+
+-- CONFIG - set to your repo
+
 local GITHUB_RAW  = "https://raw.githubusercontent.com/j4n-dev/CC-Tower-Control/master"
 local CFG_FILE    = "node.cfg"
 local VERSION_URL = GITHUB_RAW .. "/version"
 
--- Both clients and server get ui.lua – clients need it for node monitors
+-- Both clients and server get ui.lua - clients need it for node monitors
 local CLIENT_FILES = {
   "lib/protocol.lua",
   "lib/metrics.lua",
@@ -34,9 +34,9 @@ local SERVER_FILES = {
   "version",
 }
 
--- ─────────────────────────────────────────
+
 -- Helpers
--- ─────────────────────────────────────────
+
 local function readFile(path)
   if not fs.exists(path) then return nil end
   local f = fs.open(path, "r")
@@ -65,17 +65,17 @@ local function trim(s)
   return s and s:match("^%s*(.-)%s*$") or ""
 end
 
--- ─────────────────────────────────────────
+
 -- Basalt Installer
--- Runs on every computer – clients need Basalt for node monitors.
+-- Runs on every computer - clients need Basalt for node monitors.
 -- Skipped silently if already installed.
--- ─────────────────────────────────────────
+
 local function ensureBasalt()
   if fs.exists("basalt.lua") then return end
   print("[bootstrap] Installing Basalt...")
-  local body = httpGet("https://raw.githubusercontent.com/Pyroxenium/Basalt/refs/heads/master/docs/install.lua release")
+  local body = httpGet("https://raw.githubusercontent.com/Pyroxenium/Basalt/refs/heads/master/docs/install.lua")
   if not body then
-    print("[bootstrap] Could not reach Basalt CDN – UI will be unavailable.")
+    print("[bootstrap] Could not reach Basalt CDN-UI will be unavailable.")
     print("[bootstrap] Continuing without Basalt...")
     return
   end
@@ -85,15 +85,15 @@ local function ensureBasalt()
   print("[bootstrap] Basalt installed.")
 end
 
--- ─────────────────────────────────────────
+
 -- Version Check & Update
--- ─────────────────────────────────────────
+
 local function checkAndUpdate(fileList)
   print("[bootstrap] Checking for updates...")
 
   local remote = trim(httpGet(VERSION_URL) or "")
   if remote == "" then
-    print("[bootstrap] GitHub unreachable – skipping update.")
+    print("[bootstrap] GitHub unreachable - skipping update.")
     return
   end
 
@@ -104,15 +104,15 @@ local function checkAndUpdate(fileList)
     return
   end
 
-  print("[bootstrap] Updating " .. local_ .. " → " .. remote)
+  print("[bootstrap] Updating " .. local_ .. " --> " .. remote)
 
   for _, file in ipairs(fileList) do
     local body = httpGet(GITHUB_RAW .. "/" .. file)
     if body then
       writeFile(file, body)
-      print("  ✓ " .. file)
+      print("[SUCCESS]" .. file)
     else
-      print("  ✗ " .. file .. " (failed – keeping existing)")
+      print("[FAILED]" .. file .. " (failed - keeping existing)")
     end
   end
 
@@ -121,13 +121,13 @@ local function checkAndUpdate(fileList)
   os.reboot()
 end
 
--- ─────────────────────────────────────────
+
 -- Role Selection
 -- Called only on first boot when no node.cfg exists.
--- ─────────────────────────────────────────
+
 local function selectRole()
   print("")
-  print("=== Tower Control – First Boot ===")
+  print("=== Tower Control - First Boot ===")
   print("")
   print("Is this the SERVER (control center)? [y/n]")
   local ans = read():lower()
@@ -157,10 +157,10 @@ local function selectRole()
   os.reboot()
 end
 
--- ─────────────────────────────────────────
+
 -- Main
--- ─────────────────────────────────────────
-print("Tower Control – Bootstrap")
+
+print("Tower Control - Bootstrap")
 print("==========================")
 
 -- Determine file list based on existing role (if any)
@@ -174,7 +174,7 @@ end
 local isServer = existingCfg and existingCfg.role == "server"
 local fileList = isServer and SERVER_FILES or CLIENT_FILES
 
--- 1. Basalt first – needed before anything else runs
+-- 1. Basalt first - needed before anything else runs
 ensureBasalt()
 
 -- 2. Update files from GitHub

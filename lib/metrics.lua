@@ -5,14 +5,14 @@
 
 local metrics = {}
 
--- ─────────────────────────────────────────
+
 -- Metric Types
--- ─────────────────────────────────────────
--- bar    → value + max, rendered as progressbar
---          optional: warnAt (0.0–1.0 ratio), critAt
--- rate   → value with direction (in/out/net), colored arrow
--- value  → plain number, optional warnAt / critAt (absolute)
--- toggle → boolean, shown as ON/OFF indicator
+
+-- bar    --> value + max, rendered as progressbar
+--          optional: warnAt (0.0-1.0 ratio), critAt
+-- rate   --> value with direction (in/out/net), colored arrow
+-- value  --> plain number, optional warnAt / critAt (absolute)
+-- toggle --> boolean, shown as ON/OFF indicator
 
 metrics.TYPE = {
   BAR    = "bar",
@@ -21,9 +21,9 @@ metrics.TYPE = {
   TOGGLE = "toggle",
 }
 
--- ─────────────────────────────────────────
+
 -- Metric Constructors
--- ─────────────────────────────────────────
+
 
 ---@param id string
 ---@param label string
@@ -57,7 +57,7 @@ function metrics.rate(id, label, value, unit, direction)
     value     = value,
     unit      = unit,
     type      = metrics.TYPE.RATE,
-    direction = direction,  -- "in" = green ↑, "out" = red ↓, "net" = neutral
+    direction = direction,  -- "in" = green, "out" = red, "net" = neutral
   }
 end
 
@@ -91,10 +91,10 @@ function metrics.toggle(id, label, value)
   }
 end
 
--- ─────────────────────────────────────────
+
 -- Peripheral Collectors
--- Wrap these in pcall on the client – peripherals may not exist.
--- ─────────────────────────────────────────
+-- Wrap these in pcall on the client - peripherals may not exist.
+
 
 --- Collect Forge Energy metrics from a wrapped peripheral.
 --- Works with Mekanism, Powah, Bigger Reactors, etc.
@@ -192,9 +192,9 @@ function metrics.collectME(p)
   return result
 end
 
--- ─────────────────────────────────────────
+
 -- Utility
--- ─────────────────────────────────────────
+
 
 --- Merge multiple metric arrays into one.
 function metrics.merge(...)

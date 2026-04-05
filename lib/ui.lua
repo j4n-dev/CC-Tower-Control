@@ -5,9 +5,9 @@
 
 local ui = {}
 
--- ─────────────────────────────────────────
+
 -- Constants
--- ─────────────────────────────────────────
+
 local COLORS = {
   bg          = colors.black,
   bgPanel     = colors.gray,
@@ -60,9 +60,9 @@ local STATUS_COLOR = {
   offline     = COLORS.offline,
 }
 
--- ─────────────────────────────────────────
+
 -- Helpers
--- ─────────────────────────────────────────
+
 local function statusIcon(status)
   return STATUS_ICON[status] or "?"
 end
@@ -115,9 +115,9 @@ local function formatMetricValue(m)
   return tostring(m.value)
 end
 
--- ─────────────────────────────────────────
+
 -- Pinned Metrics Resolution
--- ─────────────────────────────────────────
+
 
 -- Returns list of { metric, sourceLabel } pinned TO a given area/node id
 local function getPinnedFor(targetId, server)
@@ -154,9 +154,9 @@ local function getPinnedTargets(nodeDef)
   return targets
 end
 
--- ─────────────────────────────────────────
+
 -- Render Helpers (Basalt frame builders)
--- ─────────────────────────────────────────
+
 
 -- Draw a horizontal divider label
 local function addDivider(frame, y, label)
@@ -275,9 +275,9 @@ local function addSlider(frame, y, control, currentValue, disabled, onToggle)
   return y + 2
 end
 
--- ─────────────────────────────────────────
+
 -- Screen Builders
--- ─────────────────────────────────────────
+
 
 -- Build area overview screen content into a scrollable frame
 local function buildAreaScreen(scrollFrame, area, server, onNodeSelect)
@@ -625,9 +625,9 @@ local function buildMEScreen(frame, server)
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Tab Bar
--- ─────────────────────────────────────────
+
 local function buildTabBar(basalt, monitor, areas, activeAreaId, onTabSelect)
   local w, _  = monitor:getSize()
   local tabBar = basalt.createFrame()
@@ -658,14 +658,14 @@ local function buildTabBar(basalt, monitor, areas, activeAreaId, onTabSelect)
   return tabBar
 end
 
--- ─────────────────────────────────────────
+
 -- Main UI Entry Point
--- ─────────────────────────────────────────
+
 function ui.run(server)
   -- Load Basalt
   local ok, basalt = pcall(require, "basalt")
   if not ok then
-    error("[ui] Basalt not found. Install: wget https://basalt.madefor.cc/install.lua run")
+    error("[ui] Basalt not found.")
   end
 
   local monitor = peripheral.find("monitor")

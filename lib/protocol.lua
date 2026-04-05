@@ -7,17 +7,17 @@ local protocol = {}
 protocol.CHANNEL = "tower_ctrl"
 protocol.TIMEOUT  = 5  -- seconds to wait for a response
 
--- ─────────────────────────────────────────
+
 -- Message Types
--- ─────────────────────────────────────────
+
 
 protocol.ACTION = {
-  -- Client → Server
+  -- Client --> Server
   REGISTER  = "register",   -- Client announces itself on boot
   REPORT    = "report",     -- Client pushes metric data
   ACK       = "ack",        -- Generic acknowledgement
 
-  -- Server → Client
+  -- Server --> Client
   SET       = "set",        -- Set a control value
   QUERY     = "query",      -- Request immediate metric report
   UPDATE    = "update",     -- Server tells client to re-download & reboot
@@ -27,9 +27,9 @@ protocol.ACTION = {
   PONG      = "pong",
 }
 
--- ─────────────────────────────────────────
+
 -- Message Constructors
--- ─────────────────────────────────────────
+
 
 --- Client boot registration
 function protocol.msgRegister(nodeId)
@@ -83,14 +83,14 @@ function protocol.msgPong(nodeId)
   return { action = protocol.ACTION.PONG, nodeId = nodeId }
 end
 
---- Update notification (server → client)
+--- Update notification (server --> client)
 function protocol.msgUpdate()
   return { action = protocol.ACTION.UPDATE }
 end
 
--- ─────────────────────────────────────────
+
 -- Send / Receive Helpers
--- ─────────────────────────────────────────
+
 
 --- Open the first available modem.
 --- Call once on startup.
@@ -147,9 +147,9 @@ function protocol.sendAndWait(targetId, msg, timeout)
   end
 end
 
--- ─────────────────────────────────────────
+
 -- Validation
--- ─────────────────────────────────────────
+
 
 --- Basic sanity check on incoming messages.
 ---@param msg any
