@@ -409,18 +409,18 @@ local function networkLoop()
     end
 end
 
-local function uiLoop()
-    local ok, uiMod = pcall(require, "lib/ui")
-    if not ok then
-        print("[server] UI load failed: " .. tostring(uiMod))
-        print("[server] Running headless.")
-        while true do
-            os.sleep(60)
-        end
-    end
-    uiMod.run(server)
-end
+-- Expose networkLoop so ui.lua can register it as a Basalt-managed thread.
+-- Basalt distributes events to all registered threads, so the network loop
+-- receives modem_message events without conflicting with Basalt's own loop.
+server.runNetworkLoop = networkLoop
 
-parallel.waitForAny(networkLoop, uiLoop)
+local ok, uiMod = pcall(require, "lib/ui")
+if not ok then
+    print("[server] UI load failed: " .. tostring(uiMod))
+    print("[server] Running headless.")
+    networkLoop()
+else
+    uiMod.run(server)   -- Basalt owns the event loop from here
+end
 
 return server

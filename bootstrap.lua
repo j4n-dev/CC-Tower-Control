@@ -11,12 +11,12 @@ local GITHUB_RAW = "https://raw.githubusercontent.com/j4n-dev/CC-Tower-Control/m
 local CFG_FILE = "node.cfg"
 local VERSION_URL = GITHUB_RAW .. "/version"
 
--- Both clients and server get ui.lua - clients need it for node monitors
-local CLIENT_FILES = {"lib/protocol.lua", "lib/metrics.lua", "lib/ui.lua", "client.lua", "setup.lua", "config.json",
-                      "version", "uninstall.lua"}
+-- Basalt is installed separately via its own installer, not bundled in this repo.
+local CLIENT_FILES = {"lib/protocol.lua", "lib/metrics.lua", "lib/ui.lua", "client.lua", "setup.lua",
+                      "config.json", "version", "uninstall.lua"}
 
-local SERVER_FILES = {"lib/protocol.lua", "lib/metrics.lua", "lib/ui.lua", "server.lua", "setup.lua", "config.json",
-                      "version", "uninstall.lua"}
+local SERVER_FILES = {"lib/protocol.lua", "lib/metrics.lua", "lib/ui.lua", "server.lua", "setup.lua",
+                      "config.json", "version", "uninstall.lua"}
 
 -- Helpers
 
@@ -137,6 +137,30 @@ local function selectRole()
     os.reboot()
 end
 
+-- Basalt Install
+
+-- Installs Basalt UI framework using its official installer if not already present.
+-- Called once during first-time setup and again on every boot to handle missing installs.
+local BASALT_INSTALLER = "https://raw.githubusercontent.com/Pyroxenium/Basalt2/main/install.lua"
+
+local function ensureBasalt()
+    if pcall(require, "basalt") then return end  -- already installed
+
+    print("[bootstrap] Basalt not found. Installing...")
+    local ok = pcall(shell.run, "wget", "run", BASALT_INSTALLER)
+    if not ok then
+        print("[bootstrap] Basalt install failed - UI will run headless.")
+        return
+    end
+
+    if pcall(require, "basalt") then
+        print("[bootstrap] Basalt installed successfully.")
+    else
+        print("[bootstrap] Basalt installed but could not be loaded. Check lib/ path.")
+    end
+end
+
+
 -- Main
 
 -- Determine file list based on existing role (if any)
@@ -156,6 +180,9 @@ end
 
 print("Tower Control - Bootstrap")
 print("==========================")
+
+-- 2. Ensure Basalt UI framework is installed
+ensureBasalt()
 
 -- 3. Launch
 local f = fs.open(CFG_FILE, "r")
